@@ -6,15 +6,25 @@
   // Every constant is explained in the "Where the numbers come from" table.
   const NIGHTS = 91;        // 13-week semester
   const GOAL = 8;           // h, low end of the 8–10 h recommendation
-  const HOLD_AFTER = 14;    // longest controlled restriction study (Van Dongen 2003)
+  const MEASURED = 14;      // longest controlled restriction study (Van Dongen 2003)
+  const TAU = 14;           // nights over which the post-study estimate levels off (assumption)
   const LO_DEBT_7 = 23.8;   // 7 nights × 3.4 h less sleep than controls (Lo 2016, PSG)
   const PVT_PROMPTS = 95;   // prompts in a 10-min PVT with 2–10 s gaps
+  const MIN_H = 1, MAX_H = 7;
 
-  // Lapses per 10-min PVT for a cumulative sleep debt D (hours).
+  // Lapses per 10-min PVT for a cumulative sleep debt D (hours), fitted range
   function lapsesFor(D) {
     return D <= LO_DEBT_7 ? 2 + 0.68 * D : 2 + 16.2 * Math.pow(D / LO_DEBT_7, 0.67);
   }
-  // KSS after n nights at h hours.
+  // Lapses after n nights that are each `short` hours under 8.
+  // Up to night 14: fitted to data. After: keep the night-14 rate s and level off
+  // over another TAU nights: L14 + TAU·s·(1 − e^(−(n−14)/TAU)).
+  function lapsesAt(n, short) {
+    if (n <= MEASURED) return lapsesFor(n * short);
+    const L14 = lapsesFor(MEASURED * short);
+    const s = (L14 - lapsesFor((MEASURED - 0.01) * short)) / 0.01;
+    return L14 + TAU * s * (1 - Math.exp(-(n - MEASURED) / TAU));
+  }
   function kssFor(h, n) {
     const short = Math.max(0, GOAL - h);
     return 4.7 + 2.3 * Math.sqrt(short / 3.4) * (1 - Math.exp(-n / 2.5));
@@ -24,7 +34,7 @@
     const out = { debt: [], lapse: [], kss: [] };
     for (let n = 0; n <= NIGHTS; n++) {
       out.debt.push(n * short);
-      out.lapse.push(lapsesFor(Math.min(n, HOLD_AFTER) * short));
+      out.lapse.push(lapsesAt(n, short));
       out.kss.push(kssFor(h, n));
     }
     return out;
@@ -67,6 +77,8 @@
   const spring = t => 1 - (1 + 14 * t) * Math.exp(-14 * t); // critically damped, ~0.5 s
 
   function setHours(h) {
+    h = clamp(h, MIN_H, MAX_H);
+    if (h === state.hours) return;
     state.hours = h;
     const next = simulate(h);
     if (reduceMotion.matches) { B = next; morph = null; }
@@ -90,8 +102,7 @@
 
   function metricTargetMax() {
     if (state.metric === 'kss') return 9;
-    const src = simulate(state.hours)[state.metric];
-    let m = Math.max(...src);
+    let m = Math.max(...simulate(state.hours)[state.metric]);
     if (state.metric === 'lapse') m = Math.max(m, 18.2);
     return niceMax(m);
   }
@@ -110,8 +121,8 @@
 
   function ticks(min, max) {
     if (state.metric === 'kss') return [1, 3, 5, 7, 9];
-    const n = 4, out = [];
-    for (let i = 0; i <= n; i++) out.push(min + (max - min) * i / n);
+    const out = [];
+    for (let i = 0; i <= 4; i++) out.push(min + (max - min) * i / 4);
     return out;
   }
 
@@ -124,11 +135,12 @@
     const x = d => m.l + (d / NIGHTS) * (W - m.l - m.r);
     const y = v => m.t + (1 - (clamp(v, yMin, yMax * 1.2) - yMin) / (yMax - yMin)) * (H - m.t - m.b);
     const day = clamp(state.day || 0, 0, NIGHTS);
-    let s = `<defs><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="#f8fafc"/><line x1="0" y1="0" x2="0" y2="7" stroke="#e2e8f0" stroke-width="2"/></pattern></defs>`;
+    const est = state.metric === 'lapse';
+    let s = `<defs><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="rgba(148,163,184,0.12)" stroke-width="2"/></pattern></defs>`;
 
-    if (state.metric === 'lapse') {
-      s += `<rect class="held" x="${x(HOLD_AFTER)}" y="${m.t}" width="${x(NIGHTS) - x(HOLD_AFTER)}" height="${H - m.t - m.b}" rx="6"/>`;
-      s += `<text class="held-l" x="${x(HOLD_AFTER) + 10}" y="${m.t + 16}">After night 14: no data, value held</text>`;
+    if (est) {
+      s += `<rect class="held" x="${x(MEASURED)}" y="${m.t}" width="${x(NIGHTS) - x(MEASURED)}" height="${H - m.t - m.b}" rx="6"/>`;
+      s += `<text class="held-l" x="${x(MEASURED) + 10}" y="${m.t + 16}">After night 14: no study data, estimated</text>`;
     }
     ticks(yMin, yMax).forEach((t, i) => {
       s += `<line class="${i === 0 ? 'g0' : 'g'}" x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}"/>`;
@@ -140,14 +152,19 @@
       s += `<text x="${x(w * 7)}" y="${H - 8}" text-anchor="middle">Week ${w}</text>`;
     }
 
+    // Lines: solid where the model is fitted to data, dashed where it's an estimate
+    const pathOf = (arr, from, to) => {
+      if (to <= from) return '';
+      let p = `M${x(from).toFixed(1)},${y(at(arr, from)).toFixed(1)}`;
+      for (let i = Math.floor(from) + 1; i < to; i++) p += `L${x(i).toFixed(1)},${y(arr[i]).toFixed(1)}`;
+      return p + `L${x(to).toFixed(1)},${y(at(arr, to)).toFixed(1)}`;
+    };
     [['sa', A[state.metric]], ['sb', B[state.metric]]].forEach(([cls, arr]) => {
-      let full = '', part = '';
-      for (let i = 0; i <= NIGHTS; i++) {
-        const seg = `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(arr[i]).toFixed(1)}`;
-        full += seg; if (i <= day) part += seg;
-      }
-      part += `${part ? 'L' : 'M'}${x(day).toFixed(1)},${y(at(arr, day)).toFixed(1)}`;
-      s += `<path class="ghost ${cls}" d="${full}"/><path class="line ${cls}" d="${part}"/>`;
+      const split = est ? MEASURED : NIGHTS;
+      s += `<path class="ghost ${cls}" d="${pathOf(arr, 0, split)}"/>`;
+      if (est) s += `<path class="ghost dash ${cls}" d="${pathOf(arr, split, NIGHTS)}"/>`;
+      s += `<path class="line ${cls}" d="${pathOf(arr, 0, Math.min(day, split))}"/>`;
+      if (est && day > split) s += `<path class="line dash ${cls}" d="${pathOf(arr, split, day)}"/>`;
     });
 
     if (M.points) {
@@ -158,9 +175,8 @@
     const va = at(A[state.metric], day), vb = at(B[state.metric], day);
     s += `<line class="cursor" x1="${x(day)}" x2="${x(day)}" y1="${m.t}" y2="${H - m.b}"/>`;
     s += `<circle class="dot-a" cx="${x(day)}" cy="${y(va)}" r="5.5"/><circle class="dot-b" cx="${x(day)}" cy="${y(vb)}" r="5.5"/>`;
-    // Value labels beside the cursor, nudged apart so they never overlap
     let ya = y(va) + 4, yb = y(vb) + 4;
-    if (Math.abs(ya - yb) < 16) { if (ya >= yb) { ya = yb + 16; } else { yb = ya + 16; } }
+    if (Math.abs(ya - yb) < 16) { if (ya >= yb) ya = yb + 16; else yb = ya + 16; }
     const right = x(day) > W - m.r - 70;
     const lx = right ? x(day) - 10 : x(day) + 10, anchor = right ? 'end' : 'start';
     s += `<text class="val-l val-b" x="${lx}" y="${yb}" text-anchor="${anchor}">${M.val(vb)}</text>`;
@@ -186,7 +202,6 @@
       const f = clamp(lost - i, 0, 1);
       if (Math.abs(f - c.f) < 0.002) return;
       c.el.style.setProperty('--f', f.toFixed(3));
-      c.el.classList.toggle('full', f >= 1);
       c.f = f;
     });
   }
@@ -194,21 +209,21 @@
   // ------------------------------------------------------------------ Render
   const legendData = document.querySelector('.lg-data');
   const legendHeld = document.querySelector('.lg-held');
+  const dayInput = $('day');
 
   function render() {
     const d = state.day, n = Math.round(d);
     const short = GOAL - state.hours;
 
-    // Controls
-    const dayInput = $('day');
-    dayInput.style.setProperty('--p', `${(d / NIGHTS) * 100}%`);
+    // Toolbar. The fill follows the thumb (target), never the eased value.
+    dayInput.style.setProperty('--p', `${((state.playing ? d : state.target) / NIGHTS) * 100}%`);
     if (state.playing) dayInput.value = d;
     setText($('day-label'), n === 0 ? 'Before day 1' : `Week ${Math.ceil(n / 7)}, day ${n} of ${NIGHTS}`);
-    const hoursInput = $('hours');
-    hoursInput.style.setProperty('--p', `${((state.hours - 1) / 6) * 100}%`);
     const hrs = `${state.hours} hour${state.hours === 1 ? '' : 's'}`;
     setText($('hours-out'), hrs);
     setText($('b-sleep'), `${hrs} a night`);
+    $('hours-dec').disabled = state.hours <= MIN_H;
+    $('hours-inc').disabled = state.hours >= MAX_H;
 
     // Student readouts
     const aL = at(A.lapse, d), bL = at(B.lapse, d), aK = at(A.kss, d), bK = at(B.kss, d), bD = at(B.debt, d);
@@ -232,7 +247,7 @@
         : `After ${n} night${n === 1 ? '' : 's'}, ${SB} is <strong>${Math.round(bD)} hours</strong> short: <strong>${(bD / GOAL).toFixed(1)} full nights</strong> of sleep lost. It grows by ${short} h every night because nothing pays it back. ${SA} has lost none.`;
     } else if (state.metric === 'lapse') {
       t = `${SB} has <strong>${bL.toFixed(1)} lapses</strong> per 10-minute test versus ${aL.toFixed(1)} for ${SA}, so about <strong>${Math.round(bL / PVT_PROMPTS * 100)}%</strong> of their responses come too late.` +
-        (n > HOLD_AFTER ? ' Held at the night-14 value, because no study has measured longer.' : '');
+        (n > MEASURED ? ' Past night 14 this is an estimate, because no study has measured longer.' : '');
     } else {
       const w = KSS_WORDS[clamp(Math.round(bK), 1, 9)];
       t = `${SB} rates <strong>${bK.toFixed(1)}</strong>, “${w}.” ${SA}: ${aK.toFixed(1)}. Sleepiness levels off within a week while lapses keep climbing, so tired students underestimate how impaired they are.`;
@@ -258,7 +273,7 @@
   }
 
   // ------------------------------------------------------------------ Loop
-  const DAYS_PER_SEC = 2;   // a full semester plays in about 45 s
+  const DAYS_PER_SEC = 5;   // a full semester plays in about 18 s
   let running = false, last = 0;
   function loop() {
     if (running) return;
@@ -275,7 +290,7 @@
       if (state.day >= NIGHTS) setPlaying(false); else keep = true;
     } else {
       const diff = state.target - state.day;
-      if (Math.abs(diff) > 0.002) { state.day += diff * (1 - Math.exp(-dt * 14)); keep = true; }
+      if (Math.abs(diff) > 0.002) { state.day += diff * (1 - Math.exp(-dt * 18)); keep = true; }
       else state.day = state.target;
     }
     const dy = state.yTarget - state.yMax;
@@ -295,7 +310,7 @@
       if (reduceMotion.matches) {
         state.day = state.target = NIGHTS; state.playing = false;
         btn.classList.remove('on'); $('play-text').textContent = 'Play';
-        $('day').value = NIGHTS; requestRender(); return;
+        dayInput.value = NIGHTS; requestRender(); return;
       }
       loop();
     } else requestRender();
@@ -304,42 +319,35 @@
   // ------------------------------------------------------------------ Lecture
   const LECTURE = 'Today we are looking at how the brain stores what you learn. New information first lands in the hippocampus, a small curved structure deep inside the temporal lobe. It can only hold so much. While you sleep, especially during deep slow-wave sleep, the hippocampus replays the day and the cortex copies the important parts into long-term memory. That is why sleep is not wasted time. Cut it short and the replay gets cut short too. Tomorrow\'s quiz covers the hippocampus, slow-wave sleep and long-term memory, so write those three terms down.'.split(' ');
   const WORD_MS = 300;
+  const HINT = 'Press Start lecture. Both students hear the same lesson, word for word.';
 
   const lecture = (() => {
-    const make = key => ({
-      screen: $(`screen-${key}`), words: $(`words-${key}`), missedEl: $(`${key}-missed`),
-      rate: 0, left: 0, missed: 0, inner: null,
-    });
+    const make = key => ({ screen: $(`screen-${key}`), words: $(`words-${key}`), missedEl: $(`${key}-missed`), rate: 0, left: 0, missed: 0 });
     const S = [make('a'), make('b')];
-    const stopBtn = $('lecture-stop');
-    let idx = 0, timer = 0, visible = true, done = false, stopped = false;
+    const toggle = $('lecture-toggle'), restartBtn = $('lecture-restart');
+    let idx = 0, timer = 0, visible = true;
+    let status = 'idle';   // idle | running | paused | done
 
-    function reset() {
-      clearTimeout(timer); idx = 0; done = false;
+    const LABEL = { idle: 'Start lecture', running: 'Stop lecture', paused: 'Resume lecture', done: 'Start again' };
+    function sync() {
+      toggle.textContent = LABEL[status];
+      restartBtn.hidden = status === 'idle' || status === 'done';
+      if (status !== 'running') S.forEach(s => s.screen.classList.remove('lapsing'));
+    }
+    function clearScreens(hint) {
+      idx = 0;
       S.forEach(s => {
-        s.words.textContent = '';
+        s.words.innerHTML = hint ? `<span class="hint">${HINT}</span>` : '';
         s.words.scrollTop = 0;
-        s.inner = s.words; s.left = 0; s.missed = 0;
-        s.screen.classList.remove('lapsing');
-        s.missedEl.textContent = `0 of 0 words missed`;
+        s.left = 0; s.missed = 0;
+        s.missedEl.textContent = '0 of 0 words missed';
       });
-      schedule(400);
     }
-    function schedule(ms) { clearTimeout(timer); if (visible && !stopped) timer = setTimeout(step, ms); }
-    function setStopped(v) {
-      stopped = v;
-      stopBtn.textContent = v ? 'Resume lecture' : 'Stop lecture';
-      stopBtn.setAttribute('aria-pressed', v);
-      if (v) { clearTimeout(timer); S.forEach(s => s.screen.classList.remove('lapsing')); }
-      else if (done) reset();
-      else schedule(WORD_MS);
-    }
-    stopBtn.addEventListener('click', () => setStopped(!stopped));
+    function schedule(ms) { clearTimeout(timer); if (visible && status === 'running') timer = setTimeout(step, ms); }
+    function start() { clearScreens(false); status = 'running'; sync(); schedule(250); }
+
     function step() {
-      if (idx >= LECTURE.length) {
-        S.forEach(s => s.screen.classList.remove('lapsing'));
-        done = true; timer = setTimeout(reset, 3500); return;
-      }
+      if (idx >= LECTURE.length) { status = 'done'; sync(); return; }   // stop in the finished state
       S.forEach(s => {
         const f = clamp(s.rate, 0, 0.6);
         if (s.left <= 0 && Math.random() < f / (3.3 * (1 - f))) s.left = 2 + Math.floor(Math.random() * 3);
@@ -349,7 +357,7 @@
         const sp = document.createElement('span');
         sp.textContent = LECTURE[idx] + ' ';
         if (lapsing) sp.className = 'missed';
-        s.inner.appendChild(sp);
+        s.words.appendChild(sp);
         // Text fills from the top; once it reaches the bottom, keep the newest line in view
         const over = s.words.scrollHeight - s.words.clientHeight;
         if (over > 0 && s.words.scrollTop < over) s.words.scrollTop = over;
@@ -358,31 +366,34 @@
       idx++;
       schedule(WORD_MS);
     }
-    function setVisible(v) {
-      visible = v;
-      if (!v) clearTimeout(timer);
-      else if (!done) schedule(WORD_MS);
-    }
+
+    toggle.addEventListener('click', () => {
+      if (status === 'idle' || status === 'done') start();
+      else if (status === 'running') { status = 'paused'; clearTimeout(timer); sync(); }
+      else { status = 'running'; sync(); schedule(WORD_MS); }
+    });
+    restartBtn.addEventListener('click', start);
+
+    clearScreens(true);
+    sync();
     return {
-      start: reset,
-      restart() { if (stopped) setStopped(false); reset(); },
-      setVisible,
+      setVisible(v) { visible = v; if (!v) clearTimeout(timer); else schedule(WORD_MS); },
       rates(a, b) { S[0].rate = a; S[1].rate = b; },
     };
   })();
 
   // ------------------------------------------------------------------ Events
   $('play').addEventListener('click', () => setPlaying(!state.playing));
-  $('day').addEventListener('input', e => {
+  dayInput.addEventListener('input', e => {
     if (state.playing) setPlaying(false);
     state.target = +e.target.value;
     if (reduceMotion.matches) { state.day = state.target; requestRender(); } else loop();
   });
-  $('hours').addEventListener('input', e => setHours(+e.target.value));
-  $('lecture-btn').addEventListener('click', () => lecture.restart());
+  $('hours-dec').addEventListener('click', () => setHours(state.hours - 1));
+  $('hours-inc').addEventListener('click', () => setHours(state.hours + 1));
 
   const tabs = [...document.querySelectorAll('.seg button')];
-  tabs.forEach(b => b.tabIndex = b.getAttribute('aria-selected') === 'true' ? 0 : -1);
+  tabs.forEach(b => { b.tabIndex = b.getAttribute('aria-selected') === 'true' ? 0 : -1; });
   document.querySelector('.seg').addEventListener('keydown', e => {
     const i = tabs.indexOf(document.activeElement);
     if (i < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
@@ -392,14 +403,15 @@
   });
   tabs.forEach(btn => {
     btn.addEventListener('click', () => {
-      tabs.forEach(b => b.tabIndex = b === btn ? 0 : -1);
+      tabs.forEach(b => { b.tabIndex = b === btn ? 0 : -1; });
       if (state.metric === btn.dataset.metric) return;
-      document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-selected', b === btn));
+      tabs.forEach(b => b.setAttribute('aria-selected', b === btn));
       state.metric = btn.dataset.metric;
       retargetY(true);
       if (!reduceMotion.matches) {
-        chart.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }],
-          { duration: 320, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' });
+        (state.metric === 'debt' ? nightsEl : chart).animate(
+          [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }],
+          { duration: 300, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' });
       }
       requestRender();
     });
@@ -417,18 +429,18 @@
 
   // ------------------------------------------------------------------ Hero sleep-stage trace
   // A simplified night of sleep stages (minutes): 0 awake, 1 REM, 2 light, 3 deep.
-  const NIGHT = [[2,20],[3,45],[2,10],[1,10],[2,20],[3,30],[2,15],[1,20],[0,3],[2,30],[3,10],[2,15],[1,30],
-    [0,2],[2,40],[1,40],[2,35],[1,45],[0,3],[2,27],[1,30]];
+  const NIGHT = [[2, 20], [3, 45], [2, 10], [1, 10], [2, 20], [3, 30], [2, 15], [1, 20], [0, 3], [2, 30], [3, 10], [2, 15], [1, 30],
+    [0, 2], [2, 40], [1, 40], [2, 35], [1, 45], [0, 3], [2, 27], [1, 30]];
   function drawHeroTrace() {
     const svg = $('hero-trace');
     const W = svg.clientWidth || window.innerWidth, H = 88;
     const x = m => (m / 480) * W, y = st => 8 + st * 24;
-    let t = 0, d = '', rem = '', prev = null;
-    NIGHT.forEach(([st, dur]) => {
-      d += prev === null ? `M0,${y(st)}` : `L${x(t).toFixed(1)},${y(st)}`;
+    let t = 0, d = '', rem = '';
+    NIGHT.forEach(([st, dur], k) => {
+      d += k === 0 ? `M0,${y(st)}` : `L${x(t).toFixed(1)},${y(st)}`;
       d += `L${x(t + dur).toFixed(1)},${y(st)}`;
       if (st === 1) rem += `M${(x(t) + 3).toFixed(1)},${y(1)}L${(x(t + dur) - 3).toFixed(1)},${y(1)}`;
-      prev = st; t += dur;
+      t += dur;
     });
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = `<path d="${d}"/><path class="rem" d="${rem}"/>` +
@@ -440,5 +452,4 @@
   drawHeroTrace();
   retargetY(true);
   render();
-  lecture.start();
 })();

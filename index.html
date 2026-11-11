@@ -6,6 +6,7 @@
 <title>Cognitive Effects of Sleep Loss in Students</title>
 <meta name="description" content="Two high school students, one semester. An evidence-based simulation of how short sleep builds up into sleep debt, attention lapses and sleepiness.">
 <meta name="theme-color" content="#0F172A">
+<meta name="color-scheme" content="dark">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -39,10 +40,11 @@
       <input type="range" id="day" min="0" max="91" step="any" value="45">
       <div class="ticks" aria-hidden="true"><span>Sep</span><span>Oct</span><span>Nov</span><span>Dec</span></div>
     </div>
-    <div class="control sleep">
-      <div class="control-label"><label for="hours">Student B sleeps</label><output id="hours-out" for="hours">5 hours</output></div>
-      <input type="range" id="hours" min="1" max="7" step="1" value="5">
-      <div class="ticks" aria-hidden="true"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span></div>
+    <div class="stepper" role="group" aria-labelledby="hours-label">
+      <span class="stepper-label" id="hours-label">Student B sleeps</span>
+      <button class="step" id="hours-dec" type="button" aria-label="Less sleep for Student B">−</button>
+      <output id="hours-out" aria-live="polite">5 hours</output>
+      <button class="step" id="hours-inc" type="button" aria-label="More sleep for Student B">+</button>
     </div>
   </div>
 </div>
@@ -56,8 +58,8 @@
         <p class="section-sub" id="stage-sub">Night 45 of the semester. Words missed during an attention lapse are blurred.</p>
       </div>
       <div class="lecture-actions">
-        <button class="text-btn" id="lecture-stop" type="button" aria-pressed="false">Stop lecture</button>
-        <button class="text-btn" id="lecture-btn" type="button">Restart</button>
+        <button class="text-btn" id="lecture-restart" type="button" hidden>Restart</button>
+        <button class="pill-btn" id="lecture-toggle" type="button">Start lecture</button>
       </div>
     </div>
 
@@ -124,7 +126,7 @@
         <span class="lg-line"><i class="lk a"></i>Student A</span>
         <span class="lg-line"><i class="lk b"></i>Student B</span>
         <span class="lg-data"><i class="lk-pt"></i>Measured in teens, Lo 2016</span>
-        <span class="lg-held"><i class="lk-held"></i>Beyond 14 nights: no study data, value held</span>
+        <span class="lg-held"><i class="lk-held"></i>After night 14: no study data, so the dashed line is an estimate</span>
       </div>
     </div>
   </section>
@@ -146,8 +148,8 @@
           </tr>
           <tr>
             <th scope="row">Lapses</th>
-            <td class="f">2 + 0.68 × D, up to D = 23.8<br>2 + 16.2 × (D ÷ 23.8)<sup>0.67</sup> above that<br>Held after night 14</td>
-            <td>Teens at 5 hours in bed slept 3.4 hours less than controls each night. Their lapses rose from about 2 to 18.2 in 7 nights, and a straight line fits every measured night within 1.4 lapses<sup><a href="#ref-1">1</a></sup>. Beyond that, the curve bends with the 0.67 exponent fitted over 14 nights in adults<sup><a href="#ref-6">6</a></sup>.</td>
+            <td class="f">2 + 0.68 × D, up to D = 23.8<br>2 + 16.2 × (D ÷ 23.8)<sup>0.67</sup> above that<br>After night 14: L<sub>14</sub> + 14 × s × (1 − e<sup>−(n − 14) ÷ 14</sup>)</td>
+            <td>Teens at 5 hours in bed slept 3.4 hours less than controls each night. Their lapses rose from about 2 to 18.2 in 7 nights, and a straight line fits every measured night within 1.4 lapses<sup><a href="#ref-1">1</a></sup>. Beyond that, the curve bends with the 0.67 exponent fitted over 14 nights in adults<sup><a href="#ref-6">6</a></sup>. No study goes past 14 nights, so after that the estimate keeps rising at the night-14 rate s and levels off over another 14 nights. That last step is our assumption.</td>
           </tr>
           <tr>
             <th scope="row">Sleepiness</th>
