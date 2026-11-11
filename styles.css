@@ -83,6 +83,8 @@ h2 { font-size: var(--t-title); line-height: 1.2; letter-spacing: -0.01em; }
 .hero-trace path { fill: none; stroke: var(--lav); stroke-width: 1.5; stroke-linejoin: round; opacity: 0.55; }
 .hero-trace .rem { stroke: var(--lav-ink); stroke-width: 4; stroke-linecap: round; opacity: 0.75; }
 .hero-trace text { font: 400 var(--t-cap) var(--font); fill: var(--text-2); }
+/* Stage names sit on their line; a background-colored outline keeps them legible over the trace */
+.hero-trace .stage-l { font-size: 11px; font-weight: 500; fill: var(--lav-ink); opacity: 0.8; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
 
 h1 { font-size: var(--t-hero); font-weight: 700; line-height: 1.05; letter-spacing: -0.025em; max-width: 16ch; }
 .lede { font-size: 19px; line-height: 1.5; max-width: 58ch; margin: var(--s5) 0 0; }
@@ -329,7 +331,8 @@ main { padding-bottom: var(--s8); }
 }
 
 @media (max-width: 640px) {
-  .wrap { padding: 0 var(--s4); }
+  /* Sides only: a shorthand here would wipe the vertical padding of .hero-inner, .toolbar-row and .foot-row */
+  .wrap { padding-left: var(--s4); padding-right: var(--s4); }
   .hero-inner { padding-top: var(--s7); }
   .lede { font-size: var(--t-body); }
   .facts { grid-template-columns: 1fr; gap: var(--s4); }

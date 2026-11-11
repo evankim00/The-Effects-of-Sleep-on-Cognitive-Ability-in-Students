@@ -456,9 +456,12 @@
       if (st === 1) rem += `M${(x(t) + 3).toFixed(1)},${y(1)}L${(x(t + dur) - 3).toFixed(1)},${y(1)}`;
       t += dur;
     });
+    // Subtle stage names at the middle of the night, one per level
+    const labels = ['Awake', 'REM', 'Light', 'Deep']
+      .map((name, st) => `<text class="stage-l" x="${(W / 2).toFixed(1)}" y="${y(st) + 4}" text-anchor="middle">${name}</text>`).join('');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.innerHTML = `<path d="${d}"/><path class="rem" d="${rem}"/>` +
-      `<text x="${W - 16}" y="${H - 2}" text-anchor="end">One night of sleep stages. REM, highlighted, grows toward morning.</text>`;
+    svg.innerHTML = `<path d="${d}"/><path class="rem" d="${rem}"/>${labels}` +
+      `<text x="${W - 16}" y="${H - 2}" text-anchor="end">${W < 640 ? 'One night of sleep stages' : 'One night of sleep stages. REM, highlighted, grows toward morning.'}</text>`;
   }
   window.addEventListener('resize', drawHeroTrace);
 
