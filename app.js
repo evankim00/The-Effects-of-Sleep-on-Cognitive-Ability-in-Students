@@ -215,6 +215,27 @@
     return 'Sources: ' + SOURCES[metric].map(n => `<a href="#ref-${n}">${REF[n]}</a>`).join('; ');
   }
 
+  // ------------------------------------------------------------------ Tonight card
+  // Timeline from 9 pm to 7 am (10 h). Both students wake at 7 am.
+  function clock(h24) {
+    const h = ((h24 % 24) + 24) % 24, ap = h >= 12 ? 'pm' : 'am', h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:00 ${ap}`;
+  }
+  let lastTonight = -1;
+  function renderTonight() {
+    const h = state.hours;
+    if (h === lastTonight) return;
+    lastTonight = h;
+    const start = (10 - h) / 10;               // bedtime as a share of 9 pm → 7 am
+    const shortH = GOAL - h;
+    $('b-short').style.left = '20%';
+    $('b-short').style.width = `${(start - 0.2) * 100}%`;
+    $('b-slept').style.left = `${start * 100}%`;
+    $('b-slept').style.width = `${(1 - start) * 100}%`;
+    $('b-night').textContent = `${clock(7 - h)} – 7:00 am`;
+    $('tonight-foot').textContent = `Student B goes to bed ${shortH} hour${shortH === 1 ? '' : 's'} later and loses ${shortH} hour${shortH === 1 ? '' : 's'} of sleep. Striped: the sleep that's missing.`;
+  }
+
   // ------------------------------------------------------------------ Render
   const legendData = document.querySelector('.lg-data');
   const legendHeld = document.querySelector('.lg-held');
@@ -233,6 +254,7 @@
     setText($('b-sleep'), `${hrs} a night`);
     $('hours-dec').disabled = state.hours <= MIN_H;
     $('hours-inc').disabled = state.hours >= MAX_H;
+    renderTonight();
 
     // Student readouts
     const aL = at(A.lapse, d), bL = at(B.lapse, d), aK = at(A.kss, d), bK = at(B.kss, d), bD = at(B.debt, d);
@@ -443,7 +465,7 @@
 
   // ------------------------------------------------------------------ Hero sleep-stage trace
   // A simplified night of sleep stages (minutes): 0 awake, 1 REM, 2 light, 3 deep.
-  const NIGHT = [[2, 20], [3, 45], [2, 10], [1, 10], [2, 20], [3, 30], [2, 15], [1, 20], [0, 3], [2, 30], [3, 10], [2, 15], [1, 30],
+  const NIGHT = [[0, 10], [2, 20], [3, 45], [2, 10], [1, 10], [2, 20], [3, 30], [2, 15], [1, 20], [0, 3], [2, 30], [3, 10], [2, 15], [1, 30],
     [0, 2], [2, 40], [1, 40], [2, 35], [1, 45], [0, 3], [2, 27], [1, 30]];
   function drawHeroTrace() {
     const svg = $('hero-trace');
@@ -451,9 +473,10 @@
     // Stage names sit in a column aligned with the page text; the night starts just right of them
     const inner = document.querySelector('.hero-inner');
     const textLeft = inner.getBoundingClientRect().left - svg.getBoundingClientRect().left + parseFloat(getComputedStyle(inner).paddingLeft);
-    const GUTTER = 56;
+    const GUTTER = 52;
     const x0 = textLeft + GUTTER;
-    const x = m => x0 + (m / 480) * (W - x0), y = st => 8 + st * 24;
+    const TOTAL = NIGHT.reduce((a, [, dur]) => a + dur, 0);
+    const x = m => x0 + (m / TOTAL) * (W - x0), y = st => 8 + st * 24;
     let t = 0, d = '', rem = '';
     NIGHT.forEach(([st, dur], k) => {
       d += k === 0 ? `M${x0.toFixed(1)},${y(st)}` : `L${x(t).toFixed(1)},${y(st)}`;
@@ -461,12 +484,12 @@
       if (st === 1) rem += `M${(x(t) + 3).toFixed(1)},${y(1)}L${(x(t + dur) - 3).toFixed(1)},${y(1)}`;
       t += dur;
     });
-    // Stage names beside the first cycle, one per level, with a faint guide to the line
+    // Stage names end right where the night begins; a faint guide carries each level across
     const labels = ['Awake', 'REM', 'Light', 'Deep'].map((name, st) =>
-      `<text class="stage-l" x="${textLeft.toFixed(1)}" y="${y(st) + 4.5}">${name}</text>` +
-      `<line class="stage-guide" x1="${(textLeft + GUTTER - 12).toFixed(1)}" x2="${(x0 - 2).toFixed(1)}" y1="${y(st)}" y2="${y(st)}"/>`).join('');
+      `<line class="stage-guide" x1="${x0.toFixed(1)}" x2="${W}" y1="${y(st)}" y2="${y(st)}"/>` +
+      `<text class="stage-l" x="${(x0 - 8).toFixed(1)}" y="${y(st) + 4.5}" text-anchor="end">${name}</text>`).join('');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.innerHTML = `<path d="${d}"/><path class="rem" d="${rem}"/>${labels}` +
+    svg.innerHTML = `${labels}<path d="${d}"/><path class="rem" d="${rem}"/>` +
       (W < 640 ? '' : `<text x="${W - 16}" y="${H - 2}" text-anchor="end">One night of sleep stages. REM, highlighted, grows toward morning.</text>`);
   }
   window.addEventListener('resize', drawHeroTrace);

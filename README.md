@@ -1,4 +1,4 @@
-# Cognitive Effects of Sleep Loss in Students
+# Simulating the Cognitive Effects of Sleep Loss in Students
 
 An interactive, evidence-based simulation comparing two high school students over a 13-week semester:
 

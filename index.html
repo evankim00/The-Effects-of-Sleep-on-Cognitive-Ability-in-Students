@@ -3,21 +3,42 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cognitive Effects of Sleep Loss in Students</title>
+<title>Simulating the Cognitive Effects of Sleep Loss in Students</title>
 <meta name="description" content="Two high school students, one semester. An evidence-based simulation of how short sleep builds up into sleep debt, attention lapses and sleepiness.">
 <meta name="theme-color" content="#F8FAFC">
-<link rel="stylesheet" href="styles.css?v=20261110225533">
+<link rel="stylesheet" href="styles.css?v=20261110225739">
 </head>
 <body>
 
 <header class="hero">
   <svg class="hero-trace" id="hero-trace" aria-hidden="true" preserveAspectRatio="none"></svg>
   <div class="wrap hero-inner">
-    <h1>Cognitive effects of sleep loss in students</h1>
-    <p class="lede">
-      Two high school students take the same classes for one semester. <span class="a-key">Student A</span> sleeps 8 hours a night.
-      <span class="b-key">Student B</span> sleeps less. Every number here is calculated from published sleep studies.
-    </p>
+    <div class="hero-top">
+      <div>
+        <h1>Simulating the cognitive effects of sleep loss in students</h1>
+        <p class="lede">
+          Two high school students take the same classes for one semester. <span class="a-key">Student A</span> sleeps 8 hours a night.
+          <span class="b-key">Student B</span> sleeps less. Every number here is calculated from published sleep studies.
+        </p>
+      </div>
+
+      <aside class="card tonight" aria-labelledby="tonight-title">
+        <div class="tonight-head">
+          <h2 id="tonight-title">Tonight</h2>
+          <span>Both alarms ring at 7:00 am</span>
+        </div>
+        <div class="night-row a">
+          <div class="night-label"><span>Student A</span><span id="a-night">11:00 pm – 7:00 am</span></div>
+          <div class="night-track"><i class="slept" style="left:20%;width:80%"></i></div>
+        </div>
+        <div class="night-row b">
+          <div class="night-label"><span>Student B</span><span id="b-night">2:00 am – 7:00 am</span></div>
+          <div class="night-track"><i class="short" id="b-short" style="left:20%;width:30%"></i><i class="slept" id="b-slept" style="left:50%;width:50%"></i></div>
+        </div>
+        <div class="night-axis" aria-hidden="true"><span>9 pm</span><span>11 pm</span><span>1 am</span><span>3 am</span><span>5 am</span><span>7 am</span></div>
+        <p class="tonight-foot" id="tonight-foot">Student B goes to bed 3 hours later and loses 3 hours of sleep.</p>
+      </aside>
+    </div>
     <dl class="facts">
       <div><dt>76%</dt><dd>of U.S. high school students slept under 8 hours on school nights in 2025<sup><a href="#ref-5">5</a></sup></dd></div>
       <div><dt>8–10 h</dt><dd>of sleep a night is recommended for ages 13–18<sup><a href="#ref-5">5</a></sup></dd></div>
@@ -203,6 +224,6 @@
   </div>
 </footer>
 
-<script src="app.js?v=20261110225533"></script>
+<script src="app.js?v=20261110225739"></script>
 </body>
 </html>
