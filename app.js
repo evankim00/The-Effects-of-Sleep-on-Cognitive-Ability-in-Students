@@ -469,7 +469,7 @@
     [0, 2], [2, 40], [1, 40], [2, 35], [1, 45], [0, 3], [2, 27], [1, 30]];
   function drawHeroTrace() {
     const svg = $('hero-trace');
-    const W = svg.clientWidth || window.innerWidth, H = 88;
+    const W = svg.clientWidth || window.innerWidth, H = 108;   // 88 for the stages + a row for the caption
     // Stage names sit in a column aligned with the page text; the night starts just right of them
     const inner = document.querySelector('.hero-inner');
     const textLeft = inner.getBoundingClientRect().left - svg.getBoundingClientRect().left + parseFloat(getComputedStyle(inner).paddingLeft);
@@ -490,7 +490,7 @@
       `<text class="stage-l" x="${(x0 - 8).toFixed(1)}" y="${y(st) + 4.5}" text-anchor="end">${name}</text>`).join('');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = `${labels}<path d="${d}"/><path class="rem" d="${rem}"/>` +
-      (W < 640 ? '' : `<text x="${W - 16}" y="${H - 2}" text-anchor="end">One night of sleep stages. REM, highlighted, grows toward morning.</text>`);
+      (W < 640 ? '' : `<text x="${W - 16}" y="${H - 4}" text-anchor="end">One night of sleep stages. REM, highlighted, grows toward morning.</text>`);
   }
   window.addEventListener('resize', drawHeroTrace);
 
