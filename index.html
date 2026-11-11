@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cognitive Effects of Sleep Loss in Students</title>
+<meta name="description" content="An educational simulation of how a semester of short sleep affects a high school student's sleep debt, sleepiness, reaction time and grades, based on published studies.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav class="topnav">
+  <div class="wrap topnav-row">
+    <a class="brand" href="#top">Sleep Debt Simulator</a>
+    <div class="topnav-links">
+      <a href="#sim">Simulator</a>
+      <a href="#method">How it works</a>
+      <a href="#sources">Sources</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <h1>Cognitive effects of sleep loss in students</h1>
+    <p class="lede">
+      Two high school students take the same classes for one 13-week semester.
+      <span class="a-ink">Student A</span> sleeps 8 hours a night.
+      <span class="b-ink">Student B</span> sleeps <span class="hb">5</span>.
+      Based on published sleep research, this simulator shows how that gap builds up and changes how they feel, react and perform in class.
+    </p>
+
+    <figure class="night">
+      <div class="night-head">
+        <h2>What a short night cuts out</h2>
+        <p>
+          Sleep runs in cycles of about 90 minutes. Deep sleep comes early in the night, and REM sleep gets longer toward morning.
+          When the alarm goes off early, the REM-rich final cycles are what get lost.
+        </p>
+      </div>
+      <svg id="hypnogram" class="chart" role="img" aria-label="Sleep stages across one night for each student"></svg>
+      <figcaption class="night-legend">
+        <span><i class="sw sw-rem"></i>REM sleep</span>
+        <span><i class="sw sw-lost"></i>Sleep Student B misses</span>
+        <span class="dim">A typical night, simplified. Real nights vary.</span>
+      </figcaption>
+    </figure>
+
+    <dl class="keystats">
+      <div><dt>of U.S. high school students don't get enough sleep<sup><a href="#ref-5">5</a></sup></dt><dd>75%</dd></div>
+      <div><dt>recommended per night for ages 13–18<sup><a href="#ref-5">5</a></sup></dt><dd>8–10 h</dd></div>
+      <div><dt>per night was enough to impair teens in lab studies<sup><a href="#ref-1">1</a>,<a href="#ref-2">2</a></sup></dt><dd>5 h</dd></div>
+    </dl>
+  </div>
+</header>
+
+<!-- Sticky controls -->
+<div class="controls" id="sim">
+  <div class="wrap controls-row">
+    <button class="play" id="play" type="button" aria-pressed="false">
+      <svg class="i-play" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 1.5v9l7.5-4.5z"/></svg>
+      <svg class="i-pause" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 1.5h2.5v9H2.5zM7 1.5h2.5v9H7z"/></svg>
+      <span id="play-text">Play semester</span>
+    </button>
+
+    <div class="scrub">
+      <label for="day" class="scrub-label" id="day-label">Week 7, Wednesday · Day 45 of 91</label>
+      <input type="range" id="day" min="0" max="91" step="any" value="45" aria-describedby="day-label">
+      <div class="scrub-ticks" aria-hidden="true"><span>Sep</span><span>Oct</span><span>Nov</span><span>Dec</span></div>
+    </div>
+
+    <fieldset class="seg">
+      <legend>Student B sleeps</legend>
+      <div class="seg-row">
+        <input type="radio" name="hours" id="h4" value="4"><label for="h4">4 h</label>
+        <input type="radio" name="hours" id="h5" value="5" checked><label for="h5">5 h</label>
+        <input type="radio" name="hours" id="h6" value="6"><label for="h6">6 h</label>
+      </div>
+    </fieldset>
+
+    <label class="switch">
+      <input type="checkbox" id="weekend">
+      <span class="switch-ui" aria-hidden="true"></span>
+      <span class="switch-text">Sleeps in on weekends<span class="dim">+2 h Sat &amp; Sun</span></span>
+    </label>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <!-- Scoreboard -->
+  <section class="board" aria-label="Both students on the selected day">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col" id="board-day">Day 45</th>
+          <th scope="col">Slept last night</th>
+          <th scope="col">Sleep debt</th>
+          <th scope="col">Sleepiness <span class="dim">1–9</span></th>
+          <th scope="col">Reaction time</th>
+          <th scope="col">GPA</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row-a">
+          <th scope="row"><i class="dot-a"></i>Student A</th>
+          <td id="s-sleep-a">8.0 h</td><td id="s-debt-a">0 h</td><td id="s-kss-a">—</td><td id="s-rt-a">—</td><td id="s-gpa-a">—</td>
+        </tr>
+        <tr class="row-b">
+          <th scope="row"><i class="dot-b"></i>Student B</th>
+          <td id="s-sleep-b">5.0 h</td><td id="s-debt-b">—</td><td id="s-kss-b">—</td><td id="s-rt-b">—</td><td id="s-gpa-b">—</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 1 Sleep debt -->
+  <section class="panel reveal" aria-labelledby="p1">
+    <header class="panel-head">
+      <div>
+        <h2 id="p1"><span class="pn">1</span>Sleep debt</h2>
+        <p class="takeaway" id="t1"></p>
+      </div>
+      <div class="chips">
+        <div class="chip b"><span>Student B</span><strong id="f1-b">—</strong></div>
+        <div class="chip a"><span>Student A</span><strong id="f1-a">—</strong></div>
+      </div>
+    </header>
+    <div class="calendars">
+      <div class="cal-block">
+        <p class="cal-title"><i class="dot-a"></i>Student A, every night of the semester</p>
+        <div class="cal" id="cal-a"></div>
+      </div>
+      <div class="cal-block">
+        <p class="cal-title"><i class="dot-b"></i>Student B, every night of the semester</p>
+        <div class="cal" id="cal-b"></div>
+      </div>
+    </div>
+    <div class="nights">
+      <p class="nights-label">Lost sleep added up into full 8-hour nights: <strong id="nights-n">0</strong></p>
+      <div class="nights-row" id="nights-row" aria-hidden="true"></div>
+    </div>
+    <p class="caption">
+      Each square is one night: the filled part is time asleep, the empty part is time short of 8 hours.
+      Columns are weeks, rows run Monday to Sunday. Sleep debt only goes down on nights longer than 8 hours.
+    </p>
+  </section>
+
+  <!-- 2 Sleepiness -->
+  <section class="panel reveal" aria-labelledby="p2">
+    <header class="panel-head">
+      <div>
+        <h2 id="p2"><span class="pn">2</span>Sleepiness</h2>
+        <p class="takeaway" id="t2"></p>
+      </div>
+      <div class="chips">
+        <div class="chip b"><span>Student B</span><strong id="f2-b">—</strong></div>
+        <div class="chip a"><span>Student A</span><strong id="f2-a">—</strong></div>
+      </div>
+    </header>
+    <div class="kss" aria-hidden="true">
+      <div class="kss-track">
+        <div class="kss-line"></div>
+        <div class="kss-ticks" id="kss-ticks"></div>
+        <div class="kss-marker a" id="kss-a"><span>A</span></div>
+        <div class="kss-marker b" id="kss-b"><span>B</span></div>
+      </div>
+      <div class="kss-anchors">
+        <span>Extremely<br>alert</span><span>Alert</span><span>Neither alert<br>nor sleepy</span><span>Sleepy, no effort<br>to stay awake</span><span>Fighting<br>sleep</span>
+      </div>
+    </div>
+    <p class="sub-label">Rating over the semester</p>
+    <svg id="chart-kss" class="chart" role="img" aria-label="Sleepiness rating across the semester"></svg>
+    <p class="caption">
+      Karolinska Sleepiness Scale (KSS), a 1–9 self-rating used in sleep research. In a randomized trial, teens limited to
+      5 hours a night got sleepier over a week and were still sleepier after two nights of recovery sleep<sup><a href="#ref-1">1</a></sup>.
+    </p>
+  </section>
+
+  <!-- 3 Reaction time -->
+  <section class="panel reveal" aria-labelledby="p3">
+    <header class="panel-head">
+      <div>
+        <h2 id="p3"><span class="pn">3</span>Reaction time</h2>
+        <p class="takeaway" id="t3"></p>
+      </div>
+      <div class="chips">
+        <div class="chip b"><span>Student B</span><strong id="f3-b">—</strong></div>
+        <div class="chip a"><span>Student A</span><strong id="f3-a">—</strong></div>
+      </div>
+    </header>
+    <p class="sub-label">20 tries on the selected day <span class="dim">(each dot is one press)</span></p>
+    <svg id="chart-trials" class="chart" role="img" aria-label="Dot plot of simulated reaction times"></svg>
+    <p class="sub-label">Average over the semester</p>
+    <svg id="chart-rt" class="chart" role="img" aria-label="Average reaction time across the semester"></svg>
+    <p class="caption">
+      Psychomotor Vigilance Test (PVT): press a button as soon as a counter appears. A press that takes 500 ms or longer
+      counts as a lapse, a moment when attention dropped out<sup><a href="#ref-4">4</a></sup>. With ongoing short sleep,
+      responses keep slowing even after people stop feeling much sleepier<sup><a href="#ref-6">6</a></sup>.
+    </p>
+  </section>
+
+  <!-- 4 Grades -->
+  <section class="panel reveal" aria-labelledby="p4">
+    <header class="panel-head">
+      <div>
+        <h2 id="p4"><span class="pn">4</span>Grades</h2>
+        <p class="takeaway" id="t4"></p>
+      </div>
+      <div class="chips">
+        <div class="chip b"><span>Student B GPA</span><strong id="f4-b">—</strong></div>
+        <div class="chip a"><span>Student A GPA</span><strong id="f4-a">—</strong></div>
+      </div>
+    </header>
+    <aside class="callout">
+      <strong>These grades are an example.</strong> The exact scores are invented to illustrate the idea, but the trend
+      behind them is real: in controlled studies, teens limited to 5 hours of sleep forgot more of what they learned and
+      took in new material less well<sup><a href="#ref-2">2</a>,<a href="#ref-3">3</a></sup>, and their working memory
+      and attention declined<sup><a href="#ref-1">1</a></sup>.
+    </aside>
+    <table class="grade-table">
+      <thead>
+        <tr>
+          <th scope="col">Course</th>
+          <th scope="col" class="num"><i class="dot-a"></i>A</th>
+          <th scope="col" class="num"><i class="dot-b"></i>B</th>
+          <th scope="col" class="spark-col">Semester so far <span class="dim">· dashed line is 90%</span></th>
+        </tr>
+      </thead>
+      <tbody id="grade-rows"></tbody>
+    </table>
+    <p class="caption">Each grade is the running average of every school day's quizzes and homework. Courses that depend on memorizing facts slip fastest.</p>
+  </section>
+
+  <!-- Method -->
+  <section class="method reveal" id="method" aria-labelledby="m-title">
+    <div class="method-intro">
+      <h2 id="m-title">How the simulation works</h2>
+      <p>
+        Every number on this page comes from the equations below. The studies set the direction and rough size of each
+        effect; the exact coefficients are our assumptions, chosen to stay in a believable range. Treat the output as an
+        illustration, not a prediction.
+      </p>
+    </div>
+    <div class="eqs">
+      <div class="eq">
+        <h3>Sleep debt</h3>
+        <p class="eq-f">D<sub>t</sub> = max(0, D<sub>t−1</sub> + 8 − s<sub>t</sub>)</p>
+        <p>s<sub>t</sub> is the hours slept the night before day t.</p>
+      </div>
+      <div class="eq">
+        <h3>Short-term sleep pressure</h3>
+        <p class="eq-f">P<sub>t</sub> = P<sub>t−1</sub>·e<sup>−1/4</sup> + (8 − s<sub>t</sub>)</p>
+        <p>Fades over about 4 nights, so two good nights don't erase it<sup><a href="#ref-1">1</a></sup>.</p>
+      </div>
+      <div class="eq">
+        <h3>Long-term load</h3>
+        <p class="eq-f">S<sub>t</sub> = S<sub>t−1</sub>·e<sup>−1/21</sup> + (8 − s<sub>t</sub>)</p>
+        <p>Builds up and fades over about 3 weeks<sup><a href="#ref-6">6</a></sup>.</p>
+      </div>
+      <div class="eq">
+        <h3>Sleepiness</h3>
+        <p class="eq-f">KSS = 3 + 6·(1 − e<sup>−P/12</sup>)</p>
+        <p>Starts at 3 (alert) and levels off below 9.</p>
+      </div>
+      <div class="eq">
+        <h3>Reaction time</h3>
+        <p class="eq-f">p<sub>lapse</sub> = 0.01 + 0.0015·S + 0.003·P<br>RT = (1 − p)(255 + 1.2·S + 1.5·P) + p·650 ms</p>
+        <p>A lapse is a response of 500 ms or more<sup><a href="#ref-4">4</a></sup>.</p>
+      </div>
+      <div class="eq">
+        <h3>Daily score</h3>
+        <p class="eq-f">score = 96 − m·40·(1 − e<sup>−(0.3·S + 0.4·P)/40</sup>) ± 2.5</p>
+        <p>m = 1.15 for Biology, 1.00 for U.S. History, 0.85 for Algebra II.</p>
+      </div>
+    </div>
+    <div class="limits">
+      <h3>Limitations</h3>
+      <ul>
+        <li>The lab studies lasted 5–7 nights. Extending their trends across 13 weeks is an extrapolation.</li>
+        <li>Real grades depend on much more than sleep: effort, teaching, health, stress, caffeine and luck.</li>
+        <li>People respond to sleep loss differently. These are two made-up students, not averages.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Sources -->
+  <section class="refs reveal" id="sources" aria-labelledby="r-title">
+    <h2 id="r-title">Sources</h2>
+    <ol class="ref-list">
+      <li id="ref-1">Lo JC, Ong JL, Leong RLF, Gooley JJ, Chee MWL. Cognitive performance, sleepiness, and mood in partially sleep deprived adolescents: the Need for Sleep Study. <em>Sleep</em>. 2016;39(3):687–698. <a href="https://pubmed.ncbi.nlm.nih.gov/26612392/">PubMed 26612392</a></li>
+      <li id="ref-2">Cousins JN, Wong KF, Chee MWL. Multi-night sleep restriction impairs long-term retention of factual knowledge in adolescents. <em>Journal of Adolescent Health</em>. 2019;65(4):549–557. <a href="https://pubmed.ncbi.nlm.nih.gov/31303555/">PubMed 31303555</a></li>
+      <li id="ref-3">Cousins JN, Sasmita K, Chee MWL. Memory encoding is impaired after multiple nights of partial sleep restriction. <em>Journal of Sleep Research</em>. 2018;27(1):138–145. <a href="https://pubmed.ncbi.nlm.nih.gov/28677325/">PubMed 28677325</a></li>
+      <li id="ref-4">Basner M, Dinges DF. Maximizing sensitivity of the Psychomotor Vigilance Test (PVT) to sleep loss. <em>Sleep</em>. 2011;34(5):581–591. <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC3079937/">PMC3079937</a></li>
+      <li id="ref-5">Centers for Disease Control and Prevention. Sleep and Health. Healthy Schools. <a href="https://www.cdc.gov/healthy-schools/sleep/">cdc.gov/healthy-schools/sleep</a></li>
+      <li id="ref-6">Van Dongen HPA, Maislin G, Mullington JM, Dinges DF. The cumulative cost of additional wakefulness: dose-response effects on neurobehavioral functions and sleep physiology from chronic sleep restriction and total sleep deprivation. <em>Sleep</em>. 2003;26(2):117–126. <a href="https://pubmed.ncbi.nlm.nih.gov/12683469/">PubMed 12683469</a></li>
+    </ol>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-row">
+    <span>Sleep Debt Simulator</span>
+    <span class="foot-mid">Simulated students based on real studies. Not medical advice.</span>
+    <a href="https://github.com/evankim00/The-Effects-of-Sleep-on-Cognitive-Ability-in-Students">Source on GitHub</a>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
