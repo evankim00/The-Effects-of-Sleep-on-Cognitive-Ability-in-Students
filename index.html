@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cognitive Effects of Sleep Loss in Students</title>
 <meta name="description" content="Two high school students, one semester. An evidence-based simulation of how short sleep builds up into sleep debt, attention lapses and sleepiness.">
-<meta name="theme-color" content="#0F172A">
-<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#F8FAFC">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -22,7 +21,7 @@
     <dl class="facts">
       <div><dt>76%</dt><dd>of U.S. high school students slept under 8 hours on school nights in 2025<sup><a href="#ref-5">5</a></sup></dd></div>
       <div><dt>8–10 h</dt><dd>of sleep a night is recommended for ages 13–18<sup><a href="#ref-5">5</a></sup></dd></div>
-      <div><dt>2 → 18</dt><dd>attention lapses per 10-minute test after one week at 5 hours in bed, in teens<sup><a href="#ref-1">1</a></sup></dd></div>
+      <div><dt>9×</dt><dd>more attention lapses in teens after one week at 5 hours in bed: 18 per 10-minute test, up from 2<sup><a href="#ref-1">1</a></sup></dd></div>
     </dl>
   </div>
 </header>
@@ -55,7 +54,7 @@
     <div class="section-head">
       <div>
         <h2 id="stage-title">Same lecture, different brains</h2>
-        <p class="section-sub" id="stage-sub">Night 45 of the semester. Words missed during an attention lapse are blurred.</p>
+        <p class="section-sub">Both students hear the same lesson on the day set above. Words missed during an attention lapse are blurred.</p>
       </div>
       <div class="lecture-actions">
         <button class="text-btn" id="lecture-restart" type="button" hidden>Restart</button>
@@ -71,15 +70,15 @@
         </header>
         <dl class="metrics">
           <div><dt>Sleep debt</dt><dd id="a-debt">0 h</dd></div>
-          <div><dt>Lapses per test</dt><dd id="a-lapse">2.0</dd></div>
-          <div><dt>Sleepiness</dt><dd id="a-kss">4.7</dd></div>
+          <div><dt>Lapses <span class="unit">per 10-min test</span></dt><dd id="a-lapse">2.0</dd></div>
+          <div><dt>Sleepiness <span class="unit">1–9</span></dt><dd id="a-kss">4.7</dd></div>
         </dl>
         <div class="screen" id="screen-a">
           <p class="words" id="words-a"></p>
           <div class="lid top"></div><div class="lid bottom"></div>
           <span class="lapse-tag">Lapse</span>
         </div>
-        <p class="screen-foot"><span id="a-missed">0 of 0 words missed</span><span id="a-rate"></span></p>
+        <p class="screen-foot" id="a-missed">0 of 0 words missed</p>
       </article>
 
       <article class="card student b" aria-label="Student B">
@@ -89,22 +88,23 @@
         </header>
         <dl class="metrics">
           <div><dt>Sleep debt</dt><dd id="b-debt">—</dd></div>
-          <div><dt>Lapses per test</dt><dd id="b-lapse">—</dd></div>
-          <div><dt>Sleepiness</dt><dd id="b-kss">—</dd></div>
+          <div><dt>Lapses <span class="unit">per 10-min test</span></dt><dd id="b-lapse">—</dd></div>
+          <div><dt>Sleepiness <span class="unit">1–9</span></dt><dd id="b-kss">—</dd></div>
         </dl>
         <div class="screen" id="screen-b">
           <p class="words" id="words-b"></p>
           <div class="lid top"></div><div class="lid bottom"></div>
           <span class="lapse-tag">Lapse</span>
         </div>
-        <p class="screen-foot"><span id="b-missed">0 of 0 words missed</span><span id="b-rate"></span></p>
+        <p class="screen-foot" id="b-missed">0 of 0 words missed</p>
       </article>
     </div>
 
     <p class="note">
-      Lapses are counted on a 10-minute Psychomotor Vigilance Test, where any response of 500 ms or slower is a lapse<sup><a href="#ref-4">4</a></sup>.
-      Sleepiness is the Karolinska scale, from 1 (extremely alert) to 9 (fighting sleep).
-      Teens who slept 5 hours for 5 nights also forgot more of what they did catch: 26% more after 30 minutes and 65% more after six weeks<sup><a href="#ref-2">2</a></sup>.
+      A lapse is any response of 500 ms or slower on a 10-minute attention test<sup><a href="#ref-4">4</a></sup>. Sleepiness is the Karolinska scale, from 1 (extremely alert) to 9 (fighting sleep).
+    </p>
+    <p class="note">
+      Missed words are only part of the cost. Teens restricted to 5 hours a night took in new material less well<sup><a href="#ref-3">3</a></sup> and forgot more of what they did learn: 26% more after 30 minutes and 65% more after six weeks<sup><a href="#ref-2">2</a></sup>.
     </p>
   </section>
 
@@ -120,13 +120,24 @@
       </div>
       <p class="takeaway" id="takeaway" aria-live="polite"></p>
       <svg id="chart" class="chart" role="img" aria-labelledby="takeaway"></svg>
-      <div class="nights" id="nights" role="img" aria-labelledby="takeaway"></div>
+      <div class="debt" id="debt">
+        <div>
+          <div class="bar-head"><span>Total sleep lost by Student B</span><strong id="debt-hours">0 hours</strong></div>
+          <div class="bar" role="meter" aria-label="Hours of sleep lost" aria-valuemin="0" aria-valuemax="728" id="bar-hours-m"><i id="bar-hours"></i></div>
+          <div class="bar-scale" aria-hidden="true"><span style="left:0">0</span><span style="left:25%">182</span><span style="left:50%">364</span><span style="left:75%">546</span><span style="left:100%">728 hours</span></div>
+        </div>
+        <div>
+          <div class="bar-head"><span>Full nights of sleep lost</span><strong id="debt-nights">0 nights</strong></div>
+          <div class="bar nights" role="meter" aria-label="Full nights of sleep lost" aria-valuemin="0" aria-valuemax="91" id="bar-nights-m"><i id="bar-nights"></i></div>
+          <div class="bar-scale" aria-hidden="true"><span style="left:0">0</span><span style="left:25%">23</span><span style="left:50%">46</span><span style="left:75%">68</span><span style="left:100%">91 nights</span></div>
+        </div>
+      </div>
       <div class="legend">
-        <span class="lg-night"><i class="lk-night"></i>Each square is one full 8-hour night Student B has lost</span>
+        <span class="lg-night">Both bars run to the whole semester: 728 hours of sleep, or 91 nights at 8 hours each. Each notch is one night.</span>
         <span class="lg-line"><i class="lk a"></i>Student A</span>
         <span class="lg-line"><i class="lk b"></i>Student B</span>
         <span class="lg-data"><i class="lk-pt"></i>Measured in teens, Lo 2016</span>
-        <span class="lg-held"><i class="lk-held"></i>After night 14: no study data, so the dashed line is an estimate</span>
+        <span class="lg-held"><i class="lk-held"></i>Dashed: estimate, because no study has measured past night 14</span>
       </div>
     </div>
   </section>

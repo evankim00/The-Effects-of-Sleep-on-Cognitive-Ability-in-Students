@@ -114,9 +114,9 @@
   // ------------------------------------------------------------------ Chart
   const chart = $('chart');
   const METRIC = {
-    debt:  { yMin: 0, fmt: v => `${Math.round(v)} h`, val: v => `${Math.round(v)} h`, points: null },
-    lapse: { yMin: 0, fmt: v => `${Math.round(v)}`, val: v => v.toFixed(1), points: LO.lapse },
-    kss:   { yMin: 1, fmt: v => `${Math.round(v)}`, val: v => v.toFixed(1), points: LO.kss },
+    debt:  { yMin: 0, fmt: v => `${Math.round(v)} h`, val: v => `${Math.round(v)} h`, points: null, title: '' },
+    lapse: { yMin: 0, fmt: v => `${Math.round(v)}`, val: v => v.toFixed(1), points: LO.lapse, title: 'Lapses per 10-minute test' },
+    kss:   { yMin: 1, fmt: v => `${Math.round(v)}`, val: v => v.toFixed(1), points: LO.kss, title: 'Sleepiness, Karolinska scale 1–9' },
   };
 
   function ticks(min, max) {
@@ -130,18 +130,19 @@
     const W = Math.max(280, chart.clientWidth || chart.parentNode.clientWidth);
     const H = W < 560 ? 230 : 300;
     const M = METRIC[state.metric];
-    const m = { l: 48, r: 56, t: 14, b: 30 };
+    const m = { l: 48, r: 56, t: 34, b: 30 };
     const yMin = M.yMin, yMax = state.yMax;
     const x = d => m.l + (d / NIGHTS) * (W - m.l - m.r);
     const y = v => m.t + (1 - (clamp(v, yMin, yMax * 1.2) - yMin) / (yMax - yMin)) * (H - m.t - m.b);
     const day = clamp(state.day || 0, 0, NIGHTS);
     const est = state.metric === 'lapse';
-    let s = `<defs><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="rgba(148,163,184,0.12)" stroke-width="2"/></pattern></defs>`;
+    let s = `<defs><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#e2e8f0" stroke-width="2"/></pattern></defs>`;
 
     if (est) {
       s += `<rect class="held" x="${x(MEASURED)}" y="${m.t}" width="${x(NIGHTS) - x(MEASURED)}" height="${H - m.t - m.b}" rx="6"/>`;
-      s += `<text class="held-l" x="${x(MEASURED) + 10}" y="${m.t + 16}">After night 14: no study data, estimated</text>`;
+      s += `<text class="held-l" x="${x(MEASURED) + 10}" y="${m.t + 16}">After night 14: estimate</text>`;
     }
+    s += `<text class="axis-t" x="${m.l}" y="14">${M.title}</text>`;
     ticks(yMin, yMax).forEach((t, i) => {
       s += `<line class="${i === 0 ? 'g0' : 'g'}" x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}"/>`;
       s += `<text x="${m.l - 10}" y="${y(t) + 4}" text-anchor="end">${M.fmt(t)}</text>`;
@@ -160,11 +161,13 @@
       return p + `L${x(to).toFixed(1)},${y(at(arr, to)).toFixed(1)}`;
     };
     [['sa', A[state.metric]], ['sb', B[state.metric]]].forEach(([cls, arr]) => {
-      const split = est ? MEASURED : NIGHTS;
+      // Only Student B is extrapolated; 8 h a night matches the measured rested group
+      const dashed = est && cls === 'sb' && state.hours < GOAL;
+      const split = dashed ? MEASURED : NIGHTS;
       s += `<path class="ghost ${cls}" d="${pathOf(arr, 0, split)}"/>`;
-      if (est) s += `<path class="ghost dash ${cls}" d="${pathOf(arr, split, NIGHTS)}"/>`;
+      if (dashed) s += `<path class="ghost dash ${cls}" d="${pathOf(arr, split, NIGHTS)}"/>`;
       s += `<path class="line ${cls}" d="${pathOf(arr, 0, Math.min(day, split))}"/>`;
-      if (est && day > split) s += `<path class="line dash ${cls}" d="${pathOf(arr, split, day)}"/>`;
+      if (dashed && day > split) s += `<path class="line dash ${cls}" d="${pathOf(arr, split, day)}"/>`;
     });
 
     if (M.points) {
@@ -187,23 +190,19 @@
     chart.innerHTML = s;
   }
 
-  // ------------------------------------------------------------------ Lost nights grid
-  const nightsEl = $('nights');
-  const nightCells = [];
-  for (let i = 0; i < NIGHTS; i++) {
-    const c = document.createElement('span');
-    c.className = 'n';
-    c.innerHTML = '<i></i>';
-    nightsEl.appendChild(c);
-    nightCells.push({ el: c, f: -1 });
-  }
-  function paintNights(lost) {
-    nightCells.forEach((c, i) => {
-      const f = clamp(lost - i, 0, 1);
-      if (Math.abs(f - c.f) < 0.002) return;
-      c.el.style.setProperty('--f', f.toFixed(3));
-      c.f = f;
-    });
+  // ------------------------------------------------------------------ Sleep debt bars
+  // Both bars end at the whole semester: 91 nights = 728 hours at 8 h a night.
+  const debtEl = $('debt');
+  const SEMESTER_HOURS = NIGHTS * GOAL;
+  function paintDebt(hours) {
+    const f = clamp(hours / SEMESTER_HOURS, 0, 1).toFixed(4);
+    const nights = hours / GOAL;
+    $('bar-hours').style.setProperty('--f', f);
+    $('bar-nights').style.setProperty('--f', f);
+    setText($('debt-hours'), `${Math.round(hours)} hours`);
+    setText($('debt-nights'), `${nights.toFixed(1)} nights`);
+    $('bar-hours-m').setAttribute('aria-valuenow', Math.round(hours));
+    $('bar-nights-m').setAttribute('aria-valuenow', nights.toFixed(1));
   }
 
   // ------------------------------------------------------------------ Render
@@ -229,28 +228,24 @@
     const aL = at(A.lapse, d), bL = at(B.lapse, d), aK = at(A.kss, d), bK = at(B.kss, d), bD = at(B.debt, d);
     setText($('a-debt'), '0 h');
     setText($('b-debt'), `${Math.round(bD)} h`);
+    // Past night 14 Student B's lapse count is an estimate, and says so
+    const est = n > MEASURED && short > 0 ? '<span class="est">est.</span>' : '';
     setText($('a-lapse'), aL.toFixed(1));
-    setText($('b-lapse'), bL.toFixed(1));
+    setHTML($('b-lapse'), `${bL.toFixed(1)}${est}`);
     setText($('a-kss'), aK.toFixed(1));
     setText($('b-kss'), bK.toFixed(1));
-    setText($('a-rate'), `${Math.round(aL / PVT_PROMPTS * 100)}% of responses too slow`);
-    setText($('b-rate'), `${Math.round(bL / PVT_PROMPTS * 100)}% of responses too slow`);
-    setText($('stage-sub'), n === 0
-      ? 'Before the semester, both students are rested. Words missed during an attention lapse are blurred.'
-      : `Day ${n} of the semester. Words missed during an attention lapse are blurred.`);
 
     // Takeaway
     let t = '';
     if (state.metric === 'debt') {
       t = n === 0
         ? 'The semester hasn\'t started. Press <strong>Play</strong> or drag the slider.'
-        : `After ${n} night${n === 1 ? '' : 's'}, ${SB} is <strong>${Math.round(bD)} hours</strong> short: <strong>${(bD / GOAL).toFixed(1)} full nights</strong> of sleep lost. It grows by ${short} h every night because nothing pays it back. ${SA} has lost none.`;
+        : `${SB} falls <strong>${short} hours</strong> short every night, and nothing pays it back, so the debt only grows. ${SA} loses none. Every 8 hours lost is a full night of sleep gone.`;
     } else if (state.metric === 'lapse') {
-      t = `${SB} has <strong>${bL.toFixed(1)} lapses</strong> per 10-minute test versus ${aL.toFixed(1)} for ${SA}, so about <strong>${Math.round(bL / PVT_PROMPTS * 100)}%</strong> of their responses come too late.` +
-        (n > MEASURED ? ' Past night 14 this is an estimate, because no study has measured longer.' : '');
+      t = `${SB} has <strong>${bL.toFixed(1)} lapses</strong> per 10-minute test versus ${aL.toFixed(1)} for ${SA}, so about <strong>${Math.round(bL / PVT_PROMPTS * 100)}%</strong> of their responses come too late.`;
     } else {
       const w = KSS_WORDS[clamp(Math.round(bK), 1, 9)];
-      t = `${SB} rates <strong>${bK.toFixed(1)}</strong>, “${w}.” ${SA}: ${aK.toFixed(1)}. Sleepiness levels off within a week while lapses keep climbing, so tired students underestimate how impaired they are.`;
+      t = `${SB} rates <strong>${bK.toFixed(1)}</strong>, “${w}.” ${SA}: ${aK.toFixed(1)}. Sleepiness levels off within a week, but measured attention keeps getting worse for at least two weeks, so tired students underestimate how impaired they are.`;
     }
     setHTML($('takeaway'), t);
     const isDebt = state.metric === 'debt';
@@ -259,9 +254,9 @@
     document.querySelectorAll('.lg-line').forEach(el => { el.hidden = isDebt; });
     document.querySelector('.lg-night').hidden = !isDebt;
     chart.style.display = isDebt ? 'none' : '';
-    nightsEl.style.display = isDebt ? '' : 'none';
+    debtEl.style.display = isDebt ? '' : 'none';
 
-    if (isDebt) paintNights(bD / GOAL); else drawChart();
+    if (isDebt) paintDebt(bD); else drawChart();
     lecture.rates(aL / PVT_PROMPTS, bL / PVT_PROMPTS);
   }
 
@@ -409,7 +404,7 @@
       state.metric = btn.dataset.metric;
       retargetY(true);
       if (!reduceMotion.matches) {
-        (state.metric === 'debt' ? nightsEl : chart).animate(
+        (state.metric === 'debt' ? debtEl : chart).animate(
           [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }],
           { duration: 300, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' });
       }
