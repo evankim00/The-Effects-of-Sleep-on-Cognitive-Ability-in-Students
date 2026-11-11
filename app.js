@@ -448,20 +448,26 @@
   function drawHeroTrace() {
     const svg = $('hero-trace');
     const W = svg.clientWidth || window.innerWidth, H = 88;
-    const x = m => (m / 480) * W, y = st => 8 + st * 24;
+    // Stage names sit in a column aligned with the page text; the night starts just right of them
+    const inner = document.querySelector('.hero-inner');
+    const textLeft = inner.getBoundingClientRect().left - svg.getBoundingClientRect().left + parseFloat(getComputedStyle(inner).paddingLeft);
+    const GUTTER = 56;
+    const x0 = textLeft + GUTTER;
+    const x = m => x0 + (m / 480) * (W - x0), y = st => 8 + st * 24;
     let t = 0, d = '', rem = '';
     NIGHT.forEach(([st, dur], k) => {
-      d += k === 0 ? `M0,${y(st)}` : `L${x(t).toFixed(1)},${y(st)}`;
+      d += k === 0 ? `M${x0.toFixed(1)},${y(st)}` : `L${x(t).toFixed(1)},${y(st)}`;
       d += `L${x(t + dur).toFixed(1)},${y(st)}`;
       if (st === 1) rem += `M${(x(t) + 3).toFixed(1)},${y(1)}L${(x(t + dur) - 3).toFixed(1)},${y(1)}`;
       t += dur;
     });
-    // Subtle stage names at the middle of the night, one per level
-    const labels = ['Awake', 'REM', 'Light', 'Deep']
-      .map((name, st) => `<text class="stage-l" x="${(W / 2).toFixed(1)}" y="${y(st) + 4}" text-anchor="middle">${name}</text>`).join('');
+    // Stage names beside the first cycle, one per level, with a faint guide to the line
+    const labels = ['Awake', 'REM', 'Light', 'Deep'].map((name, st) =>
+      `<text class="stage-l" x="${textLeft.toFixed(1)}" y="${y(st) + 4.5}">${name}</text>` +
+      `<line class="stage-guide" x1="${(textLeft + GUTTER - 12).toFixed(1)}" x2="${(x0 - 2).toFixed(1)}" y1="${y(st)}" y2="${y(st)}"/>`).join('');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = `<path d="${d}"/><path class="rem" d="${rem}"/>${labels}` +
-      `<text x="${W - 16}" y="${H - 2}" text-anchor="end">${W < 640 ? 'One night of sleep stages' : 'One night of sleep stages. REM, highlighted, grows toward morning.'}</text>`;
+      (W < 640 ? '' : `<text x="${W - 16}" y="${H - 2}" text-anchor="end">One night of sleep stages. REM, highlighted, grows toward morning.</text>`);
   }
   window.addEventListener('resize', drawHeroTrace);
 

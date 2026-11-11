@@ -84,7 +84,8 @@ h2 { font-size: var(--t-title); line-height: 1.2; letter-spacing: -0.01em; }
 .hero-trace .rem { stroke: var(--lav-ink); stroke-width: 4; stroke-linecap: round; opacity: 0.75; }
 .hero-trace text { font: 400 var(--t-cap) var(--font); fill: var(--text-2); }
 /* Stage names sit on their line; a background-colored outline keeps them legible over the trace */
-.hero-trace .stage-l { font-size: 11px; font-weight: 500; fill: var(--lav-ink); opacity: 0.8; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.hero-trace .stage-l { font-size: 13px; font-weight: 500; fill: var(--lav-ink); }
+.hero-trace .stage-guide { stroke: var(--lav); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0.6; }
 
 h1 { font-size: var(--t-hero); font-weight: 700; line-height: 1.05; letter-spacing: -0.025em; max-width: 16ch; }
 .lede { font-size: 19px; line-height: 1.5; max-width: 58ch; margin: var(--s5) 0 0; }
