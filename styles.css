@@ -89,7 +89,7 @@ h2 { font-size: var(--t-title); line-height: 1.2; letter-spacing: -0.01em; }
 
 h1 { font-size: var(--t-hero); font-weight: 700; line-height: 1.05; letter-spacing: -0.025em; max-width: 18ch; }
 
-.hero-top { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: var(--s7); align-items: end; }
+.hero-top { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: var(--s7); align-items: center; }
 
 /* Tonight: each student's night on a 9 pm to 7 am timeline */
 .tonight { padding: var(--s5); }
