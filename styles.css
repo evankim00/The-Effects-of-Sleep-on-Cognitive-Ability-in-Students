@@ -389,3 +389,6 @@ main { padding-bottom: var(--s8); }
 @media (prefers-contrast: more) {
   :root { --text-2: #334155; --line: #cbd5e1; }
 }
+
+.foot-credit { justify-self: end; }
+@media (max-width: 640px) { .foot-credit { justify-self: start; } }
