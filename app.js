@@ -1,524 +1,250 @@
-/* Sleep Debt Simulator: model + rendering. No dependencies. */
+/* Sleep Debt Simulator: model, lecture and semester chart. No dependencies. */
 (() => {
   'use strict';
 
-  // ------------------------------------------------------------------ Constants
-  const NIGHTS = 91;            // 13 weeks, about 3 months
-  const GOAL = 8;               // hours
-  const REST_HOURS = 8;
-  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const COURSES = [
-    { key: 'g_bio', name: 'Biology',      kind: 'Memorizing facts',    m: 1.15 },
-    { key: 'g_his', name: 'U.S. History', kind: 'Reading and recall',  m: 1.00 },
-    { key: 'g_alg', name: 'Algebra II',   kind: 'Multi-step problems', m: 0.85 },
-  ];
-  const KSS_WORDS = [
-    '', 'Extremely alert', 'Very alert', 'Alert', 'Rather alert', 'Neither alert nor sleepy',
-    'Some signs of sleepiness', 'Sleepy, but no effort to stay awake',
-    'Sleepy, some effort to stay awake', 'Fighting sleep',
-  ];
-  const SERIES_KEYS = ['sleep', 'debt', 'kss', 'core', 'lapse', 'rt', ...COURSES.map(c => c.key)];
-
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-
-  // ------------------------------------------------------------------ Helpers
-  const $ = (id) => document.getElementById(id);
-  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-
-  function mulberry32(a) {
-    return function () {
-      a |= 0; a = (a + 0x6d2b79f5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-  function gauss(r) {
-    let u = 0; while (!u) u = r();
-    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r());
-  }
-
-  function letter(p) {
-    if (p == null) return '—';
-    if (p >= 93) return 'A';  if (p >= 90) return 'A−';
-    if (p >= 87) return 'B+'; if (p >= 83) return 'B';  if (p >= 80) return 'B−';
-    if (p >= 77) return 'C+'; if (p >= 73) return 'C';  if (p >= 70) return 'C−';
-    if (p >= 67) return 'D+'; if (p >= 63) return 'D';  if (p >= 60) return 'D−';
-    return 'F';
-  }
-  const GPA = { 'A': 4, 'A−': 3.7, 'B+': 3.3, 'B': 3, 'B−': 2.7, 'C+': 2.3, 'C': 2, 'C−': 1.7, 'D+': 1.3, 'D': 1, 'D−': 0.7, 'F': 0 };
-
-  function dayLabel(d) {
-    if (d <= 0) return 'Before the semester · Day 0 of 91';
-    return `Week ${Math.ceil(d / 7)}, ${DAYS[(d - 1) % 7]} · Day ${d} of ${NIGHTS}`;
-  }
-  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-
   // ------------------------------------------------------------------ Model
-  // Day i = 1..91; sleep[i] is the night before it. The semester starts on a Monday.
-  function simulate(hours, weekendCatchup, seed) {
-    const r = mulberry32(seed);
-    const out = {};
-    SERIES_KEYS.forEach(k => { out[k] = new Array(NIGHTS + 1).fill(null); });
+  // Every constant is explained in the "Where the numbers come from" table.
+  const NIGHTS = 91;        // 13-week semester
+  const GOAL = 8;           // h, low end of the 8–10 h recommendation
+  const HOLD_AFTER = 14;    // longest controlled restriction study (Van Dongen 2003)
+  const LO_DEBT_7 = 23.8;   // 7 nights × 3.4 h less sleep than controls (Lo 2016, PSG)
+  const PVT_PROMPTS = 95;   // prompts in a 10-min PVT with 2–10 s gaps
 
-    let D = 0, P = 0, S = 0, n = 0;
-    const kP = Math.exp(-1 / 4), kS = Math.exp(-1 / 21);
-    const sums = {}; COURSES.forEach(c => { sums[c.key] = 0; });
-
-    out.sleep[0] = hours; out.debt[0] = 0; out.kss[0] = 3; out.core[0] = 255; out.lapse[0] = 0.01; out.rt[0] = 259;
-
-    for (let i = 1; i <= NIGHTS; i++) {
-      const dow = (i - 1) % 7;
-      const weekend = dow >= 5;
-      let s = hours;
-      if (weekendCatchup && weekend && hours < GOAL) s = Math.min(9, hours + 2);
-      const def = GOAL - s;
-
-      D = Math.max(0, D + def);
-      P = Math.max(0, P * kP + def);
-      S = Math.max(0, S * kS + def);
-
-      const kss = clamp(3 + 6 * (1 - Math.exp(-P / 12)) + gauss(r) * 0.22, 1, 9);
-      const core = 255 + 1.2 * S + 1.5 * P;
-      const lapse = Math.min(0.3, 0.01 + 0.0015 * S + 0.003 * P);
-      const rt = (1 - lapse) * core + lapse * 650 + gauss(r) * 3;
-
-      out.sleep[i] = s; out.debt[i] = D; out.kss[i] = kss;
-      out.core[i] = core; out.lapse[i] = lapse; out.rt[i] = rt;
-
-      if (!weekend) n++;
-      COURSES.forEach(c => {
-        const noise = clamp(gauss(r) * 1.2, -2.5, 2.5);
-        if (!weekend) {
-          const pen = c.m * 40 * (1 - Math.exp(-(0.3 * S + 0.4 * P) / 40));
-          sums[c.key] += clamp(96 - pen + noise, 0, 100);
-        }
-        out[c.key][i] = sums[c.key] / n;
-      });
+  // Lapses per 10-min PVT for a cumulative sleep debt D (hours).
+  function lapsesFor(D) {
+    return D <= LO_DEBT_7 ? 2 + 0.68 * D : 2 + 16.2 * Math.pow(D / LO_DEBT_7, 0.67);
+  }
+  // KSS after n nights at h hours.
+  function kssFor(h, n) {
+    const short = Math.max(0, GOAL - h);
+    return 4.7 + 2.3 * Math.sqrt(short / 3.4) * (1 - Math.exp(-n / 2.5));
+  }
+  function simulate(h) {
+    const short = Math.max(0, GOAL - h);
+    const out = { debt: [], lapse: [], kss: [] };
+    for (let n = 0; n <= NIGHTS; n++) {
+      out.debt.push(n * short);
+      out.lapse.push(lapsesFor(Math.min(n, HOLD_AFTER) * short));
+      out.kss.push(kssFor(h, n));
     }
     return out;
   }
 
-  // Linear interpolation into a series at fractional day d
+  // Measured points read from Lo et al. 2016, Figure 2 (B3 = night 0, M1–M7 = nights 1–7)
+  const LO = {
+    lapse: { short: [1.8, 3.6, 6.2, 7.6, 12.5, 14.0, 16.0, 18.2], rested: [2.2, 2.1, 2.6, 2.2, 2.3, 2.3, 2.6, 3.0] },
+    kss:   { short: [4.2, 5.3, 5.9, 6.2, 6.6, 5.9, 6.4, 6.9],      rested: [4.5, 4.4, 5.0, 5.1, 4.7, 4.9, 4.8, 4.9] },
+  };
+
+  const KSS_WORDS = ['', 'extremely alert', 'very alert', 'alert', 'rather alert', 'neither alert nor sleepy',
+    'some signs of sleepiness', 'sleepy, but no effort to stay awake', 'sleepy, some effort to stay awake', 'fighting sleep'];
+
+  // ------------------------------------------------------------------ Helpers
+  const $ = id => document.getElementById(id);
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   function at(arr, d) {
     const i = Math.floor(d), f = d - i;
     if (i >= NIGHTS) return arr[NIGHTS];
-    const a = arr[i], b = arr[i + 1];
-    if (a == null) return f > 0.5 ? b : null;
-    if (b == null || f === 0) return a;
-    return a + (b - a) * f;
+    return arr[i] + (arr[i + 1] - arr[i]) * f;
   }
+  function niceMax(v) {
+    const steps = [10, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 250, 300, 400, 500, 600, 700, 800];
+    return steps.find(s => s >= v * 1.08) || Math.ceil(v / 100) * 100;
+  }
+  function setText(el, t) { if (el.textContent !== t) el.textContent = t; }
+  function setHTML(el, h) { if (el.innerHTML !== h) el.innerHTML = h; }
+  const SA = '<span class="a-ink">Student A</span>';
+  const SB = '<span class="b-ink">Student B</span>';
 
   // ------------------------------------------------------------------ State
-  const state = { day: 45, target: 45, hours: 5, weekend: false, playing: false };
-  const A = simulate(REST_HOURS, false, 11);
-  let B = simulate(state.hours, state.weekend, 23);
+  const state = { day: 45, target: 45, hours: 5, playing: false, metric: 'debt', yMax: 300, yTarget: 300 };
+  const A = simulate(GOAL);
+  let B = simulate(state.hours);
   let morph = null;
 
-  function setB(next) {
-    if (reduceMotion.matches) { B = next; morph = null; requestRender(); return; }
-    const from = {};
-    SERIES_KEYS.forEach(k => { from[k] = B[k].slice(); });
-    morph = { from, to: next, t0: performance.now() };
-    B = { ...next };
-    SERIES_KEYS.forEach(k => { B[k] = from[k].slice(); });
+  const spring = t => 1 - (1 + 14 * t) * Math.exp(-14 * t); // critically damped, ~0.5 s
+
+  function setHours(h) {
+    state.hours = h;
+    const next = simulate(h);
+    if (reduceMotion.matches) { B = next; morph = null; }
+    else {
+      morph = { from: { debt: B.debt.slice(), lapse: B.lapse.slice(), kss: B.kss.slice() }, to: next, t0: performance.now() };
+      B = { debt: B.debt.slice(), lapse: B.lapse.slice(), kss: B.kss.slice() };
+    }
+    retargetY();
     loop();
   }
-
-  // Critically damped spring: no overshoot on data, settles in about 450 ms
-  const springProgress = t => 1 - (1 + 15 * t) * Math.exp(-15 * t);
-
   function stepMorph(now) {
     if (!morph) return false;
-    const t = (now - morph.t0) / 1000;
-    const p = t > 0.7 ? 1 : springProgress(t);
-    SERIES_KEYS.forEach(k => {
+    const p = (now - morph.t0) / 1000 > 0.8 ? 1 : spring((now - morph.t0) / 1000);
+    for (const k of ['debt', 'lapse', 'kss']) {
       const a = morph.from[k], b = morph.to[k], o = B[k];
-      for (let i = 0; i <= NIGHTS; i++) {
-        o[i] = (a[i] == null || b[i] == null) ? b[i] : a[i] + (b[i] - a[i]) * p;
-      }
-    });
+      for (let i = 0; i <= NIGHTS; i++) o[i] = a[i] + (b[i] - a[i]) * p;
+    }
     if (p >= 1) { B = morph.to; morph = null; return false; }
     return true;
   }
 
-  // ------------------------------------------------------------------ Line chart
-  function lineChart(svg, opt) {
-    const W = Math.max(260, svg.clientWidth || svg.parentNode.clientWidth);
-    const H = opt.height;
-    const m = { l: opt.ml || 40, r: 10, t: 8, b: 24 };
-    const iw = W - m.l - m.r, ih = H - m.t - m.b;
-    const x = d => m.l + (d / NIGHTS) * iw;
-    const y = v => m.t + (1 - (v - opt.yMin) / (opt.yMax - opt.yMin)) * ih;
-    const day = state.day;
-    let s = '';
-
-    opt.yTicks.forEach(t => {
-      s += `<line class="${t === opt.yMin ? 'g0' : 'g'}" x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}"/>`;
-      s += `<text x="${m.l - 8}" y="${y(t) + 4}" text-anchor="end">${opt.yFmt(t)}</text>`;
-    });
-    const every = W < 480 ? 4 : 2;
-    for (let w = 1; w <= 13; w++) {
-      const xx = x(w * 7);
-      s += `<line class="xt" x1="${xx}" x2="${xx}" y1="${H - m.b}" y2="${H - m.b + 4}"/>`;
-      if (w % every === 1 || w === 13) s += `<text x="${xx}" y="${H - m.b + 17}" text-anchor="${w === 13 ? 'end' : 'middle'}">Week ${w}</text>`;
-    }
-
-    opt.series.forEach(se => {
-      const start = se.data[0] == null ? 1 : 0;
-      let full = '', part = '';
-      for (let i = start; i <= NIGHTS; i++) {
-        const seg = `${i === start ? 'M' : 'L'}${x(i).toFixed(1)},${y(se.data[i]).toFixed(1)}`;
-        full += seg;
-        if (i <= day) part += seg;
-      }
-      const v = at(se.data, day);
-      if (v != null && day > start) part += `L${x(day).toFixed(1)},${y(v).toFixed(1)}`;
-      s += `<path class="ghost ${se.cls}" d="${full}"/>`;
-      if (part) s += `<path class="line ${se.cls}" d="${part}"/>`;
-    });
-
-    s += `<line class="cursor" x1="${x(day)}" x2="${x(day)}" y1="${m.t}" y2="${H - m.b}"/>`;
-    opt.series.forEach(se => {
-      const v = at(se.data, day);
-      if (v != null) s += `<circle class="dot ${se.cls}" cx="${x(day)}" cy="${y(v)}" r="4.5"/>`;
-    });
-
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.setAttribute('height', H);
-    svg.innerHTML = s;
+  function metricTargetMax() {
+    if (state.metric === 'kss') return 9;
+    const src = simulate(state.hours)[state.metric];
+    let m = Math.max(...src);
+    if (state.metric === 'lapse') m = Math.max(m, 18.2);
+    return niceMax(m);
+  }
+  function retargetY(jump) {
+    state.yTarget = metricTargetMax();
+    if (jump || reduceMotion.matches) state.yMax = state.yTarget;
   }
 
-  // ------------------------------------------------------------------ Reaction trials
-  function trials(series, d, seed) {
-    const i = Math.round(d);
-    const r = mulberry32(seed * 1000 + i);
-    const core = series.core[i], lapse = series.lapse[i];
-    const sd = 24 + (core - 255) * 0.45;
-    const out = [];
-    for (let k = 0; k < 20; k++) {
-      if (r() < lapse) out.push(Math.min(1000, 500 + -Math.log(1 - r()) * 170));
-      else out.push(clamp(core + gauss(r) * sd, 160, 495));
-    }
+  // ------------------------------------------------------------------ Chart
+  const chart = $('chart');
+  const METRIC = {
+    debt:  { yMin: 0, fmt: v => `${Math.round(v)} h`, val: v => `${Math.round(v)} h`, points: null },
+    lapse: { yMin: 0, fmt: v => `${Math.round(v)}`, val: v => v.toFixed(1), points: LO.lapse },
+    kss:   { yMin: 1, fmt: v => `${Math.round(v)}`, val: v => v.toFixed(1), points: LO.kss },
+  };
+
+  function ticks(min, max) {
+    if (state.metric === 'kss') return [1, 3, 5, 7, 9];
+    const n = 4, out = [];
+    for (let i = 0; i <= n; i++) out.push(min + (max - min) * i / n);
     return out;
   }
 
-  function trialChart(svg) {
-    const W = Math.max(260, svg.clientWidth || svg.parentNode.clientWidth);
-    const rows = [{ label: 'A', data: trials(A, state.day, 1), cls: 'sa' }, { label: 'B', data: trials(B, state.day, 2), cls: 'sb' }];
-    const rowH = 32, m = { l: 40, r: 10, t: 18, b: 24 };
-    const H = m.t + rows.length * rowH + m.b;
-    const lo = 150, hi = 1000;
-    const x = v => m.l + ((clamp(v, lo, hi) - lo) / (hi - lo)) * (W - m.l - m.r);
-    let s = `<rect class="zone" x="${x(500)}" y="${m.t}" width="${x(hi) - x(500)}" height="${rows.length * rowH}" rx="4"/>`;
-    const ticks = W < 480 ? [200, 400, 600, 800, 1000] : [200, 300, 400, 500, 600, 700, 800, 900, 1000];
-    ticks.forEach(t => {
-      s += `<line class="xt" x1="${x(t)}" x2="${x(t)}" y1="${H - m.b}" y2="${H - m.b + 4}"/>`;
-      s += `<text x="${x(t)}" y="${H - m.b + 17}" text-anchor="${t === 1000 ? 'end' : 'middle'}">${t === 1000 ? '1000 ms' : t}</text>`;
-    });
-    s += `<line class="g0" x1="${m.l}" x2="${W - m.r}" y1="${H - m.b}" y2="${H - m.b}"/>`;
-    s += `<line class="thr" x1="${x(500)}" x2="${x(500)}" y1="${m.t - 4}" y2="${H - m.b}"/>`;
-    s += `<text class="thr-l" x="${x(500) + 6}" y="${m.t - 6}">Lapse zone, 500 ms or slower</text>`;
-    rows.forEach((row, ri) => {
-      const cy = m.t + ri * rowH + rowH / 2;
-      s += `<text class="row-l" x="${m.l - 12}" y="${cy + 4}" text-anchor="end">${row.label}</text>`;
-      row.data.forEach((v, k) => {
-        const jitter = ((k * 37) % 9 - 4) * 1.5;
-        s += `<circle class="trial ${row.cls}" cx="${x(v).toFixed(1)}" cy="${(cy + jitter).toFixed(1)}" r="4.5"/>`;
-      });
-    });
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.setAttribute('height', H);
-    svg.innerHTML = s;
-  }
-
-  // ------------------------------------------------------------------ Grade sparklines
-  function sparkline(svg, keyName) {
-    const W = Math.max(160, svg.clientWidth || 300), H = 52;
-    const lo = 60, hi = 100;
-    const x = d => (d / NIGHTS) * (W - 6) + 3;
-    const y = v => 5 + (1 - (clamp(v, lo, hi) - lo) / (hi - lo)) * (H - 10);
+  function drawChart() {
+    const W = Math.max(280, chart.clientWidth || chart.parentNode.clientWidth);
+    const H = W < 560 ? 230 : 300;
+    const M = METRIC[state.metric];
+    const m = { l: 48, r: 56, t: 14, b: 30 };
+    const yMin = M.yMin, yMax = state.yMax;
+    const x = d => m.l + (d / NIGHTS) * (W - m.l - m.r);
+    const y = v => m.t + (1 - (clamp(v, yMin, yMax * 1.2) - yMin) / (yMax - yMin)) * (H - m.t - m.b);
     const day = state.day;
-    let s = `<line class="thr" x1="0" x2="${W}" y1="${y(90)}" y2="${y(90)}" style="opacity:.4"/>`;
-    [[A, 'sa'], [B, 'sb']].forEach(([ser, cls]) => {
-      const arr = ser[keyName];
+    let s = `<defs><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="rgba(255,255,255,0.025)"/><line x1="0" y1="0" x2="0" y2="7" stroke="rgba(255,255,255,0.09)" stroke-width="2"/></pattern></defs>`;
+
+    if (state.metric === 'lapse') {
+      s += `<rect class="held" x="${x(HOLD_AFTER)}" y="${m.t}" width="${x(NIGHTS) - x(HOLD_AFTER)}" height="${H - m.t - m.b}" rx="6"/>`;
+      s += `<text class="held-l" x="${x(HOLD_AFTER) + 10}" y="${m.t + 16}">After night 14: no data, value held</text>`;
+    }
+    ticks(yMin, yMax).forEach((t, i) => {
+      s += `<line class="${i === 0 ? 'g0' : 'g'}" x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}"/>`;
+      s += `<text x="${m.l - 10}" y="${y(t) + 4}" text-anchor="end">${M.fmt(t)}</text>`;
+    });
+    const every = W < 560 ? 4 : 2;
+    for (let w = 1; w <= 13; w++) {
+      if (w % every !== 1 && w !== 13) continue;
+      s += `<text x="${x(w * 7)}" y="${H - 8}" text-anchor="middle">Week ${w}</text>`;
+    }
+
+    [['sa', A[state.metric]], ['sb', B[state.metric]]].forEach(([cls, arr]) => {
       let full = '', part = '';
-      for (let i = 1; i <= NIGHTS; i++) {
-        const seg = `${i === 1 ? 'M' : 'L'}${x(i).toFixed(1)},${y(arr[i]).toFixed(1)}`;
+      for (let i = 0; i <= NIGHTS; i++) {
+        const seg = `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(arr[i]).toFixed(1)}`;
         full += seg; if (i <= day) part += seg;
       }
-      s += `<path class="ghost ${cls}" d="${full}"/>`;
-      if (part) s += `<path class="line ${cls}" d="${part}" style="stroke-width:2"/>`;
-      const v = at(arr, day);
-      if (v != null) s += `<circle class="dot ${cls}" cx="${x(day)}" cy="${y(v)}" r="3.5"/>`;
-    });
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.innerHTML = s;
-  }
-
-  // ------------------------------------------------------------------ Hypnogram (hero)
-  // A simplified night: [stage, minutes]. 0 Awake, 1 REM, 2 Light, 3 Deep.
-  const NIGHT = [
-    [2, 20], [3, 45], [2, 10], [1, 10],
-    [2, 20], [3, 30], [2, 15], [1, 20],
-    [0, 3], [2, 30], [3, 10], [2, 15], [1, 30],
-    [0, 2], [2, 40], [1, 40],
-    [2, 35], [1, 45],
-    [0, 3], [2, 27], [1, 30],
-  ];
-  const STAGE_NAMES = ['Awake', 'REM', 'Light', 'Deep'];
-
-  function clock(h) {
-    const hh = ((h % 24) + 24) % 24;
-    const ap = hh >= 12 ? 'pm' : 'am';
-    const h12 = hh % 12 === 0 ? 12 : hh % 12;
-    return `${h12}:00 ${ap}`;
-  }
-
-  function hypnogram() {
-    const svg = $('hypnogram');
-    const W = Math.max(260, svg.clientWidth || svg.parentNode.clientWidth);
-    const narrow = W < 560;
-    const m = { l: narrow ? 44 : 54, r: 8 };
-    const plotH = 64, titleH = 22, gap = 18;
-    const iw = W - m.l - m.r;
-    const x = min => m.l + (min / 480) * iw;
-    let s = '';
-
-    const rows = [
-      { cls: 'sa', title: 'Student A', sub: `${clock(23)} to 7:00 am, 8 h`, cut: 480 },
-      { cls: 'sb', title: 'Student B', sub: `${clock(7 - state.hours)} to 7:00 am, ${state.hours} h`, cut: state.hours * 60 },
-    ];
-
-    rows.forEach((row, ri) => {
-      const top = ri * (titleH + plotH + gap);
-      const y0 = top + titleH + 6;
-      const yS = st => y0 + (st / 3) * (plotH - 12);
-      s += `<text class="row-t" x="0" y="${top + 14}">${row.title}</text>`;
-      s += `<text class="row-s" x="${narrow ? 72 : 82}" y="${top + 14}">${row.sub}</text>`;
-      STAGE_NAMES.forEach((n, st) => {
-        s += `<text class="stage-l" x="${m.l - 8}" y="${yS(st) + 4}" text-anchor="end">${n}</text>`;
-        s += `<line class="g" x1="${m.l}" x2="${W - m.r}" y1="${yS(st)}" y2="${yS(st)}"/>`;
-      });
-
-      let t = 0, kept = '', lost = '', rem = '', prevY = null;
-      NIGHT.forEach(([st, dur]) => {
-        const a = t, b = t + dur; t = b;
-        const yy = yS(st);
-        const seg = (from, to) => `${prevY == null ? 'M' : 'L'}${x(from).toFixed(1)},${(prevY == null ? yy : prevY).toFixed(1)}L${x(from).toFixed(1)},${yy.toFixed(1)}L${x(to).toFixed(1)},${yy.toFixed(1)}`;
-        if (b <= row.cut) {
-          kept += seg(a, b);
-          if (st === 1) rem += `M${x(a) + 2},${yy}L${x(b) - 2},${yy}`;
-        } else if (a >= row.cut) {
-          lost += (lost ? '' : `M${x(a).toFixed(1)},${(prevY ?? yy).toFixed(1)}`) + `L${x(a).toFixed(1)},${yy.toFixed(1)}L${x(b).toFixed(1)},${yy.toFixed(1)}`;
-        } else {
-          kept += seg(a, row.cut);
-          if (st === 1 && row.cut - a > 4) rem += `M${x(a) + 2},${yy}L${x(row.cut) - 2},${yy}`;
-          lost += `M${x(row.cut).toFixed(1)},${yy.toFixed(1)}L${x(b).toFixed(1)},${yy.toFixed(1)}`;
-        }
-        prevY = yy;
-      });
-      s += `<path class="stage" d="${kept}"/>`;
-      if (lost) s += `<path class="stage lost" d="${lost}"/>`;
-      s += `<path class="rem ${row.cls}" d="${rem}"/>`;
-      if (row.cut < 480) {
-        s += `<line class="alarm" x1="${x(row.cut)}" x2="${x(row.cut)}" y1="${y0 - 6}" y2="${y0 + plotH - 6}"/>`;
-        s += `<text class="alarm-l" x="${x(row.cut) + 6}" y="${y0 + plotH - 8}">Alarm</text>`;
-      }
+      part += `L${x(day).toFixed(1)},${y(at(arr, day)).toFixed(1)}`;
+      s += `<path class="ghost ${cls}" d="${full}"/><path class="line ${cls}" d="${part}"/>`;
     });
 
-    const axisY = 2 * (titleH + plotH + gap) - gap + 6;
-    for (let h = 0; h <= 8; h++) {
-      if (narrow && h % 2) continue;
-      s += `<text x="${x(h * 60)}" y="${axisY + 12}" text-anchor="${h === 8 ? 'end' : h === 0 ? 'start' : 'middle'}">${h === 0 ? 'Fall asleep' : h + ' h'}</text>`;
+    if (M.points) {
+      [...M.points.short.map((v, i) => [i, v]), ...M.points.rested.map((v, i) => [i, v])]
+        .forEach(([i, v]) => { s += `<circle class="pt" cx="${x(i)}" cy="${y(v)}" r="3.6"/>`; });
     }
-    const H = axisY + 18;
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.setAttribute('height', H);
-    svg.innerHTML = s;
+
+    const va = at(A[state.metric], day), vb = at(B[state.metric], day);
+    s += `<line class="cursor" x1="${x(day)}" x2="${x(day)}" y1="${m.t}" y2="${H - m.b}"/>`;
+    s += `<circle class="dot-a" cx="${x(day)}" cy="${y(va)}" r="5.5"/><circle class="dot-b" cx="${x(day)}" cy="${y(vb)}" r="5.5"/>`;
+    // Value labels beside the cursor, nudged apart so they never overlap
+    let ya = y(va) + 4, yb = y(vb) + 4;
+    if (Math.abs(ya - yb) < 16) { if (ya >= yb) { ya = yb + 16; } else { yb = ya + 16; } }
+    const right = x(day) > W - m.r - 70;
+    const lx = right ? x(day) - 10 : x(day) + 10, anchor = right ? 'end' : 'start';
+    s += `<text class="val-l val-b" x="${lx}" y="${yb}" text-anchor="${anchor}">${M.val(vb)}</text>`;
+    s += `<text class="val-l val-a" x="${lx}" y="${ya}" text-anchor="${anchor}">${M.val(va)}</text>`;
+
+    chart.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    chart.setAttribute('height', H);
+    chart.innerHTML = s;
   }
 
-  // ------------------------------------------------------------------ DOM setup
-  const els = {
-    day: $('day'), dayLabel: $('day-label'), play: $('play'), playText: $('play-text'), weekend: $('weekend'),
-    chartKss: $('chart-kss'), chartRt: $('chart-rt'), chartTrials: $('chart-trials'),
-    kssA: $('kss-a'), kssB: $('kss-b'), gradeRows: $('grade-rows'), nightsRow: $('nights-row'),
-  };
-
-  // KSS ticks
-  const tickBox = $('kss-ticks');
-  for (let k = 1; k <= 9; k++) {
-    const t = document.createElement('i');
-    t.className = 'kss-tick';
-    t.style.left = `${((k - 1) / 8) * 100}%`;
-    t.innerHTML = `<span>${k}</span>`;
-    tickBox.appendChild(t);
+  // ------------------------------------------------------------------ Lost nights grid
+  const nightsEl = $('nights');
+  const nightCells = [];
+  for (let i = 0; i < NIGHTS; i++) {
+    const c = document.createElement('span');
+    c.className = 'n';
+    c.innerHTML = '<i></i>';
+    nightsEl.appendChild(c);
+    nightCells.push({ el: c, f: -1 });
   }
-
-  // Sleep calendars
-  function buildCalendar(host, cls) {
-    const wrap = document.createElement('div');
-    wrap.className = 'cal-wrap';
-    wrap.innerHTML = `<div class="cal-days">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(d => `<span>${d}</span>`).join('')}</div>`;
-    const right = document.createElement('div');
-    const grid = document.createElement('div');
-    grid.className = `cal ${cls}`;
-    const cells = [];
-    for (let i = 1; i <= NIGHTS; i++) {
-      const c = document.createElement('span');
-      c.className = 'cell';
-      c.innerHTML = '<i></i>';
-      grid.appendChild(c);
-      cells.push({ el: c, f: -1, state: '' });
-    }
-    right.appendChild(grid);
-    right.insertAdjacentHTML('beforeend', `<div class="cal-weeks">${Array.from({ length: 13 }, (_, w) => `<span>${w + 1}</span>`).join('')}</div>`);
-    wrap.appendChild(right);
-    host.replaceWith(wrap);
-    wrap.querySelector('.cal').id = host.id;
-    return cells;
-  }
-  const calA = buildCalendar($('cal-a'), 'a');
-  const calB = buildCalendar($('cal-b'), 'b');
-
-  function paintCalendar(cells, series, di) {
-    cells.forEach((c, k) => {
-      const i = k + 1;
-      const f = clamp(series.sleep[i] / GOAL, 0, 1);
-      if (Math.abs(f - c.f) > 0.001) { c.el.style.setProperty('--f', f.toFixed(3)); c.f = f; }
-      const st = i > di ? 'future' : i === di ? 'today' : '';
-      if (st !== c.state) {
-        c.el.classList.toggle('future', st === 'future');
-        c.el.classList.toggle('today', st === 'today');
-        c.state = st;
-      }
+  function paintNights(lost) {
+    nightCells.forEach((c, i) => {
+      const f = clamp(lost - i, 0, 1);
+      if (Math.abs(f - c.f) < 0.002) return;
+      c.el.style.setProperty('--f', f.toFixed(3));
+      c.el.classList.toggle('full', f >= 1);
+      c.f = f;
     });
   }
-
-  let lastTokens = -1;
-  function paintNights(debt) {
-    const n = debt / GOAL;
-    const key = Math.round(n * 20);
-    if (key === lastTokens) return;
-    lastTokens = key;
-    const whole = Math.floor(n), frac = n - whole;
-    let h = '';
-    for (let k = 0; k < whole; k++) h += '<span class="night-tok"><i></i></span>';
-    if (frac > 0.05) h += `<span class="night-tok"><i style="--f:${frac.toFixed(2)}"></i></span>`;
-    els.nightsRow.innerHTML = h;
-    $('nights-n').textContent = n.toFixed(1);
-  }
-
-  // Grade rows
-  const gradeEls = COURSES.map(c => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <th scope="row"><span class="course">${c.name}</span><span class="kind">${c.kind}</span></th>
-      <td class="grade-cell a"><span class="letter">—</span><span class="pct">—</span></td>
-      <td class="grade-cell b"><span class="letter">—</span><span class="pct">—</span></td>
-      <td class="spark-cell"><svg class="chart spark" aria-hidden="true"></svg></td>`;
-    els.gradeRows.appendChild(tr);
-    const cells = tr.querySelectorAll('.grade-cell');
-    return {
-      c,
-      aL: cells[0].querySelector('.letter'), aP: cells[0].querySelector('.pct'),
-      bL: cells[1].querySelector('.letter'), bP: cells[1].querySelector('.pct'),
-      spark: tr.querySelector('.spark'),
-    };
-  });
-
-  function setText(el, txt) { if (el.textContent !== txt) el.textContent = txt; }
-  function setHTML(el, html) { if (el.innerHTML !== html) el.innerHTML = html; }
-  function setLetter(el, txt) {
-    if (el.textContent === txt) return;
-    el.textContent = txt;
-    if (reduceMotion.matches) return;
-    el.classList.remove('tick'); void el.offsetWidth; el.classList.add('tick');
-  }
-  const SA = '<span class="a-ink">Student A</span>';
-  const SB = '<span class="b-ink">Student B</span>';
 
   // ------------------------------------------------------------------ Render
+  const legendData = document.querySelector('.lg-data');
+  const legendHeld = document.querySelector('.lg-held');
+
   function render() {
-    const d = state.day;
-    const di = Math.round(d);
+    const d = state.day, n = Math.round(d);
+    const short = GOAL - state.hours;
 
     // Controls
-    els.day.style.setProperty('--p', `${(d / NIGHTS) * 100}%`);
-    if (state.playing) els.day.value = d;
-    setText(els.dayLabel, dayLabel(di));
-    setText($('board-day'), di === 0 ? 'Day 0' : `Day ${di}`);
+    const dayInput = $('day');
+    dayInput.style.setProperty('--p', `${(d / NIGHTS) * 100}%`);
+    if (state.playing) dayInput.value = d;
+    setText($('day-label'), n === 0 ? 'Start · Day 0 of 91' : `Week ${Math.ceil(n / 7)} · Day ${n} of ${NIGHTS}`);
+    const hoursInput = $('hours');
+    hoursInput.style.setProperty('--p', `${((state.hours - 1) / 6) * 100}%`);
+    setText($('hours-out'), `${state.hours} h`);
 
-    const debtA = at(A.debt, d), debtB = at(B.debt, d);
-    const kssA = at(A.kss, d), kssB = at(B.kss, d);
-    const rtA = at(A.rt, d), rtB = at(B.rt, d);
-    const lapA = Math.round(at(A.lapse, d) * 20), lapB = Math.round(at(B.lapse, d) * 20);
+    // Student readouts
+    const aL = at(A.lapse, d), bL = at(B.lapse, d), aK = at(A.kss, d), bK = at(B.kss, d), bD = at(B.debt, d);
+    setHTML($('a-debt'), `0<small> h</small>`);
+    setHTML($('b-debt'), `${Math.round(bD)}<small> h</small>`);
+    setText($('a-lapse'), aL.toFixed(1));
+    setText($('b-lapse'), bL.toFixed(1));
+    setText($('a-kss'), aK.toFixed(1));
+    setText($('b-kss'), bK.toFixed(1));
+    setText($('a-rate'), `≈${Math.round(aL / PVT_PROMPTS * 100)}% of responses too slow`);
+    setText($('b-rate'), `≈${Math.round(bL / PVT_PROMPTS * 100)}% of responses too slow`);
+    setText($('stage-sub'), n === 0
+      ? 'The night before the semester. Both students start rested. Blurred words are ones missed during a lapse.'
+      : `Night ${n} of the semester. Blurred words are ones missed during an attention lapse.`);
 
-    // Scoreboard
-    const slB = di === 0 ? state.hours : B.sleep[di];
-    setText($('s-sleep-a'), `${REST_HOURS.toFixed(1)} h`);
-    setText($('s-sleep-b'), `${slB.toFixed(1)} h`);
-    setText($('s-debt-a'), `${debtA.toFixed(0)} h`);
-    setText($('s-debt-b'), `${debtB.toFixed(0)} h`);
-    setText($('s-kss-a'), kssA.toFixed(1));
-    setText($('s-kss-b'), kssB.toFixed(1));
-    setText($('s-rt-a'), `${Math.round(rtA)} ms`);
-    setText($('s-rt-b'), `${Math.round(rtB)} ms`);
+    // Takeaway
+    let t = '';
+    if (state.metric === 'debt') {
+      t = n === 0
+        ? 'The semester hasn\'t started. Press <strong>Play semester</strong> or drag the slider.'
+        : `After ${n} night${n === 1 ? '' : 's'}, ${SB} is <strong>${Math.round(bD)} hours</strong> short: <strong>${(bD / GOAL).toFixed(1)} full nights</strong> of sleep lost. It grows by ${short} h every night because nothing pays it back. ${SA} has lost none.`;
+    } else if (state.metric === 'lapse') {
+      t = `${SB} has <strong>${bL.toFixed(1)} lapses</strong> per 10-minute test versus ${aL.toFixed(1)} for ${SA}, so about <strong>${Math.round(bL / PVT_PROMPTS * 100)}%</strong> of their responses come too late.` +
+        (n > HOLD_AFTER ? ' Held at the night-14 value, because no study has measured longer.' : '');
+    } else {
+      const w = KSS_WORDS[clamp(Math.round(bK), 1, 9)];
+      t = `${SB} rates <strong>${bK.toFixed(1)}</strong>, “${w}.” ${SA}: ${aK.toFixed(1)}. Sleepiness levels off within a week while lapses keep climbing, so tired students underestimate how impaired they are.`;
+    }
+    setHTML($('takeaway'), t);
+    const isDebt = state.metric === 'debt';
+    legendData.hidden = isDebt;
+    legendHeld.hidden = state.metric !== 'lapse';
+    document.querySelectorAll('.lg-line').forEach(el => { el.hidden = isDebt; });
+    document.querySelector('.lg-night').hidden = !isDebt;
+    chart.style.display = isDebt ? 'none' : '';
+    nightsEl.hidden = !isDebt;
 
-    // 1 Sleep debt
-    setHTML($('f1-b'), `${debtB.toFixed(1)}<small> h</small>`);
-    setHTML($('f1-a'), `${debtA.toFixed(1)}<small> h</small>`);
-    setHTML($('t1'), di === 0
-      ? 'The semester hasn\'t started yet. Press <strong>Play semester</strong> or drag the slider.'
-      : `After ${plural(di, 'night')}, ${SB} is <strong>${debtB.toFixed(0)} hours</strong> short on sleep, the same as skipping <strong>${(debtB / GOAL).toFixed(1)} full nights</strong>. ${SA} owes nothing.`);
-    paintCalendar(calA, A, di);
-    paintCalendar(calB, B, di);
-    paintNights(debtB);
-
-    // 2 Sleepiness
-    const wA = KSS_WORDS[clamp(Math.round(kssA), 1, 9)], wB = KSS_WORDS[clamp(Math.round(kssB), 1, 9)];
-    setText($('f2-a'), kssA.toFixed(1));
-    setText($('f2-b'), kssB.toFixed(1));
-    setHTML($('t2'), `${SB} rates <strong>${kssB.toFixed(1)}</strong>, “${wB.toLowerCase()}.” ${SA} rates <strong>${kssA.toFixed(1)}</strong>, “${wA.toLowerCase()}.”`);
-    els.kssA.style.setProperty('--x', `${((kssA - 1) / 8) * 100}%`);
-    els.kssB.style.setProperty('--x', `${((kssB - 1) / 8) * 100}%`);
-    lineChart(els.chartKss, {
-      height: 150, yMin: 1, yMax: 9, yTicks: [1, 3, 5, 7, 9], yFmt: t => t, ml: 28,
-      series: [{ data: A.kss, cls: 'sa' }, { data: B.kss, cls: 'sb' }],
-    });
-
-    // 3 Reaction time
-    setHTML($('f3-a'), `${Math.round(rtA)}<small> ms</small>`);
-    setHTML($('f3-b'), `${Math.round(rtB)}<small> ms</small>`);
-    setHTML($('t3'), `${SB} reacts <strong>${Math.round(rtB - rtA)} ms slower</strong> on average and has about <strong>${plural(lapB, 'lapse')}</strong> in every 20 tries. ${SA} has ${lapA === 0 ? 'none' : `about ${lapA}`}.`);
-    trialChart(els.chartTrials);
-    lineChart(els.chartRt, {
-      height: 160, yMin: 200, yMax: 450, yTicks: [200, 250, 300, 350, 400, 450], yFmt: t => t,
-      series: [{ data: A.rt, cls: 'sa' }, { data: B.rt, cls: 'sb' }],
-    });
-
-    // 4 Grades + GPA
-    let gpaA = 0, gpaB = 0;
-    const lettersB = [];
-    gradeEls.forEach(g => {
-      const a = at(A[g.c.key], d), b = at(B[g.c.key], d);
-      const la = letter(a), lb = letter(b);
-      setLetter(g.aL, la); setLetter(g.bL, lb);
-      setText(g.aP, a == null ? '—' : `${a.toFixed(1)}%`);
-      setText(g.bP, b == null ? '—' : `${b.toFixed(1)}%`);
-      gpaA += GPA[la] || 0; gpaB += GPA[lb] || 0;
-      lettersB.push(`${lb} in ${g.c.name}`);
-      sparkline(g.spark, g.c.key);
-    });
-    const hasGrades = at(A.g_bio, d) != null;
-    const gA = hasGrades ? (gpaA / 3).toFixed(2) : '—', gB = hasGrades ? (gpaB / 3).toFixed(2) : '—';
-    setText($('s-gpa-a'), gA); setText($('s-gpa-b'), gB);
-    setText($('f4-a'), gA); setText($('f4-b'), gB);
-    setHTML($('t4'), !hasGrades
-      ? 'Grades start once classes do.'
-      : gpaB === gpaA
-        ? `Both students have straight A's so far. Keep going.`
-        : `${SA} keeps straight A's. ${SB} has slipped to <strong>${lettersB[0]}</strong>, <strong>${lettersB[1]}</strong> and <strong>${lettersB[2]}</strong>.`);
+    if (isDebt) paintNights(bD / GOAL); else drawChart();
+    lecture.rates(aL / PVT_PROMPTS, bL / PVT_PROMPTS);
   }
 
   let queued = false;
@@ -528,10 +254,9 @@
     requestAnimationFrame(() => { queued = false; render(); });
   }
 
-  // ------------------------------------------------------------------ Animation loop
+  // ------------------------------------------------------------------ Loop
+  const DAYS_PER_SEC = 2;   // a full semester plays in about 45 s
   let running = false, last = 0;
-  const DAYS_PER_SEC = 9;
-
   function loop() {
     if (running) return;
     running = true; last = performance.now();
@@ -544,88 +269,133 @@
     if (state.playing) {
       state.day = Math.min(NIGHTS, state.day + dt * DAYS_PER_SEC);
       state.target = state.day;
-      if (state.day >= NIGHTS) setPlaying(false);
-      else keep = true;
+      if (state.day >= NIGHTS) setPlaying(false); else keep = true;
     } else {
-      // Ease toward the slider so drags and track clicks glide instead of jumping.
       const diff = state.target - state.day;
-      if (Math.abs(diff) > 0.002) { state.day += diff * (1 - Math.exp(-dt * 26)); keep = true; }
+      if (Math.abs(diff) > 0.002) { state.day += diff * (1 - Math.exp(-dt * 14)); keep = true; }
       else state.day = state.target;
     }
+    const dy = state.yTarget - state.yMax;
+    if (Math.abs(dy) > 0.01) { state.yMax += dy * (1 - Math.exp(-dt * 9)); keep = true; } else state.yMax = state.yTarget;
     render();
-    if (keep) requestAnimationFrame(tick);
-    else running = false;
+    if (keep) requestAnimationFrame(tick); else running = false;
   }
 
   function setPlaying(on) {
     state.playing = on;
-    els.play.classList.toggle('on', on);
-    els.play.setAttribute('aria-pressed', on);
-    els.playText.textContent = on ? 'Pause' : 'Play semester';
+    const btn = $('play');
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', on);
+    $('play-text').textContent = on ? 'Pause' : 'Play semester';
     if (on) {
-      if (state.day >= NIGHTS - 0.01) { state.day = 0; state.target = 0; }
+      if (state.day >= NIGHTS - 0.01) state.day = state.target = 0;
       if (reduceMotion.matches) {
         state.day = state.target = NIGHTS; state.playing = false;
-        els.play.classList.remove('on');
-        els.playText.textContent = 'Play semester';
-        els.day.value = NIGHTS;
-        requestRender();
-        return;
+        btn.classList.remove('on'); $('play-text').textContent = 'Play semester';
+        $('day').value = NIGHTS; requestRender(); return;
       }
       loop();
-    } else {
-      requestRender();
-    }
+    } else requestRender();
   }
 
+  // ------------------------------------------------------------------ Lecture
+  const LECTURE = 'Today we are looking at how the brain stores what you learn. New information first lands in the hippocampus, a small curved structure deep inside the temporal lobe. It can only hold so much. While you sleep, especially during deep slow-wave sleep, the hippocampus replays the day and the cortex copies the important parts into long-term memory. That is why sleep is not wasted time. Cut it short and the replay gets cut short too. Tomorrow\'s quiz covers the hippocampus, slow-wave sleep and long-term memory, so write those three terms down.'.split(' ');
+  const WORD_MS = 300;
+
+  const lecture = (() => {
+    const make = key => ({
+      screen: $(`screen-${key}`), words: $(`words-${key}`), missedEl: $(`${key}-missed`),
+      rate: 0, left: 0, missed: 0, inner: null,
+    });
+    const S = [make('a'), make('b')];
+    let idx = 0, timer = 0, visible = true, done = false;
+
+    function reset() {
+      clearTimeout(timer); idx = 0; done = false;
+      S.forEach(s => {
+        s.words.innerHTML = '<span class="inner"></span>';
+        s.inner = s.words.firstChild; s.left = 0; s.missed = 0;
+        s.screen.classList.remove('lapsing');
+        s.missedEl.textContent = `0 of 0 words missed`;
+      });
+      schedule(400);
+    }
+    function schedule(ms) { clearTimeout(timer); if (visible) timer = setTimeout(step, ms); }
+    function step() {
+      if (idx >= LECTURE.length) {
+        S.forEach(s => s.screen.classList.remove('lapsing'));
+        done = true; timer = setTimeout(reset, 3500); return;
+      }
+      S.forEach(s => {
+        const f = clamp(s.rate, 0, 0.6);
+        if (s.left <= 0 && Math.random() < f / (3.3 * (1 - f))) s.left = 2 + Math.floor(Math.random() * 3);
+        const lapsing = s.left > 0;
+        if (lapsing) { s.left--; s.missed++; }
+        s.screen.classList.toggle('lapsing', lapsing);
+        const sp = document.createElement('span');
+        sp.textContent = LECTURE[idx] + ' ';
+        if (lapsing) sp.className = 'missed';
+        s.inner.appendChild(sp);
+        s.missedEl.textContent = `${s.missed} of ${idx + 1} words missed`;
+      });
+      idx++;
+      schedule(WORD_MS);
+    }
+    function setVisible(v) {
+      visible = v;
+      if (!v) clearTimeout(timer);
+      else if (!done) schedule(WORD_MS);
+    }
+    return {
+      start: reset,
+      restart: reset,
+      setVisible,
+      rates(a, b) { S[0].rate = a; S[1].rate = b; },
+    };
+  })();
+
   // ------------------------------------------------------------------ Events
-  els.play.addEventListener('click', () => setPlaying(!state.playing));
-
-  els.day.addEventListener('input', () => {
+  $('play').addEventListener('click', () => setPlaying(!state.playing));
+  $('day').addEventListener('input', e => {
     if (state.playing) setPlaying(false);
-    state.target = +els.day.value;
-    if (reduceMotion.matches) { state.day = state.target; requestRender(); }
-    else loop();
+    state.target = +e.target.value;
+    if (reduceMotion.matches) { state.day = state.target; requestRender(); } else loop();
   });
+  $('hours').addEventListener('input', e => setHours(+e.target.value));
+  $('lecture-btn').addEventListener('click', () => lecture.restart());
 
-  document.querySelectorAll('input[name="hours"]').forEach(inp => {
-    inp.addEventListener('change', () => {
-      state.hours = +inp.value;
-      document.querySelectorAll('.hb').forEach(el => { el.textContent = state.hours; });
-      hypnogram();
-      setB(simulate(state.hours, state.weekend, 23));
+  document.querySelectorAll('.seg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (state.metric === btn.dataset.metric) return;
+      document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-selected', b === btn));
+      state.metric = btn.dataset.metric;
+      retargetY(true);
+      if (!reduceMotion.matches) {
+        chart.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }],
+          { duration: 320, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' });
+      }
+      requestRender();
     });
   });
-  els.weekend.addEventListener('change', () => {
-    state.weekend = els.weekend.checked;
-    setB(simulate(state.hours, state.weekend, 23));
-  });
 
-  // Redraw SVGs at the new width
+  // Pause the lecture while it's off screen
+  new IntersectionObserver(([e]) => lecture.setVisible(e.isIntersecting), { threshold: 0.15 })
+    .observe(document.querySelector('.students'));
+
   let lastW = 0;
-  const onResize = () => {
-    const w = document.querySelector('main').clientWidth;
-    if (w === lastW) return;
-    lastW = w;
-    hypnogram();
-    requestRender();
-  };
-  if ('ResizeObserver' in window) new ResizeObserver(onResize).observe(document.querySelector('main'));
-  else window.addEventListener('resize', onResize);
+  new ResizeObserver(() => {
+    const w = chart.parentNode.clientWidth;
+    if (w !== lastW) { lastW = w; requestRender(); }
+  }).observe(chart.parentNode);
 
-  // Shadow on the control bar once it's pinned
-  const controls = $('sim');
-  const sentinel = document.createElement('div');
-  controls.parentNode.insertBefore(sentinel, controls);
-  new IntersectionObserver(([e]) => controls.classList.toggle('stuck', !e.isIntersecting)).observe(sentinel);
-
-  // Reveal panels once as they enter
-  const revealIO = new IntersectionObserver(entries => {
-    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); revealIO.unobserve(e.target); } });
-  }, { rootMargin: '0px 0px -6% 0px' });
-  document.querySelectorAll('.reveal').forEach(el => revealIO.observe(el));
+  // Gentle reveal for sections below the fold
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+  }), { rootMargin: '0px 0px -6% 0px' });
+  document.querySelectorAll('.trend, .method, .refs').forEach(el => { el.classList.add('reveal'); io.observe(el); });
 
   // ------------------------------------------------------------------ Go
-  hypnogram();
+  retargetY(true);
   render();
+  lecture.start();
 })();
