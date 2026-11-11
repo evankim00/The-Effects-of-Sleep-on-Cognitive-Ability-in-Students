@@ -326,7 +326,7 @@
     const LABEL = { idle: 'Start lecture', running: 'Stop lecture', paused: 'Resume lecture', done: 'Start again' };
     function sync() {
       toggle.textContent = LABEL[status];
-      restartBtn.hidden = status === 'idle' || status === 'done';
+      restartBtn.hidden = status === 'idle';
       if (status !== 'running') S.forEach(s => s.screen.classList.remove('lapsing'));
     }
     function clearScreens(hint) {
@@ -367,7 +367,14 @@
       else if (status === 'running') { status = 'paused'; clearTimeout(timer); sync(); }
       else { status = 'running'; sync(); schedule(WORD_MS); }
     });
-    restartBtn.addEventListener('click', start);
+    // Reset clears the screens and ends the lecture; it does not start a new one
+    restartBtn.addEventListener('click', () => {
+      clearTimeout(timer);
+      status = 'idle';
+      clearScreens(true);
+      sync();
+      toggle.focus();
+    });
 
     clearScreens(true);
     sync();
