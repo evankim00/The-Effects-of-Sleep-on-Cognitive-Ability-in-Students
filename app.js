@@ -44,6 +44,7 @@
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   function at(arr, d) {
+    d = clamp(d || 0, 0, NIGHTS);
     const i = Math.floor(d), f = d - i;
     if (i >= NIGHTS) return arr[NIGHTS];
     return arr[i] + (arr[i + 1] - arr[i]) * f;
@@ -54,8 +55,8 @@
   }
   function setText(el, t) { if (el.textContent !== t) el.textContent = t; }
   function setHTML(el, h) { if (el.innerHTML !== h) el.innerHTML = h; }
-  const SA = '<span class="a-ink">Student A</span>';
-  const SB = '<span class="b-ink">Student B</span>';
+  const SA = '<span class="a">Student A</span>';
+  const SB = '<span class="b">Student B</span>';
 
   // ------------------------------------------------------------------ State
   const state = { day: 45, target: 45, hours: 5, playing: false, metric: 'debt', yMax: 300, yTarget: 300 };
@@ -122,8 +123,8 @@
     const yMin = M.yMin, yMax = state.yMax;
     const x = d => m.l + (d / NIGHTS) * (W - m.l - m.r);
     const y = v => m.t + (1 - (clamp(v, yMin, yMax * 1.2) - yMin) / (yMax - yMin)) * (H - m.t - m.b);
-    const day = state.day;
-    let s = `<defs><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="rgba(255,255,255,0.025)"/><line x1="0" y1="0" x2="0" y2="7" stroke="rgba(255,255,255,0.09)" stroke-width="2"/></pattern></defs>`;
+    const day = clamp(state.day || 0, 0, NIGHTS);
+    let s = `<defs><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="#f8fafc"/><line x1="0" y1="0" x2="0" y2="7" stroke="#e2e8f0" stroke-width="2"/></pattern></defs>`;
 
     if (state.metric === 'lapse') {
       s += `<rect class="held" x="${x(HOLD_AFTER)}" y="${m.t}" width="${x(NIGHTS) - x(HOLD_AFTER)}" height="${H - m.t - m.b}" rx="6"/>`;
@@ -145,7 +146,7 @@
         const seg = `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(arr[i]).toFixed(1)}`;
         full += seg; if (i <= day) part += seg;
       }
-      part += `L${x(day).toFixed(1)},${y(at(arr, day)).toFixed(1)}`;
+      part += `${part ? 'L' : 'M'}${x(day).toFixed(1)},${y(at(arr, day)).toFixed(1)}`;
       s += `<path class="ghost ${cls}" d="${full}"/><path class="line ${cls}" d="${part}"/>`;
     });
 
@@ -202,30 +203,32 @@
     const dayInput = $('day');
     dayInput.style.setProperty('--p', `${(d / NIGHTS) * 100}%`);
     if (state.playing) dayInput.value = d;
-    setText($('day-label'), n === 0 ? 'Start · Day 0 of 91' : `Week ${Math.ceil(n / 7)} · Day ${n} of ${NIGHTS}`);
+    setText($('day-label'), n === 0 ? 'Before day 1' : `Week ${Math.ceil(n / 7)}, day ${n} of ${NIGHTS}`);
     const hoursInput = $('hours');
     hoursInput.style.setProperty('--p', `${((state.hours - 1) / 6) * 100}%`);
-    setText($('hours-out'), `${state.hours} h`);
+    const hrs = `${state.hours} hour${state.hours === 1 ? '' : 's'}`;
+    setText($('hours-out'), hrs);
+    setText($('b-sleep'), `${hrs} a night`);
 
     // Student readouts
     const aL = at(A.lapse, d), bL = at(B.lapse, d), aK = at(A.kss, d), bK = at(B.kss, d), bD = at(B.debt, d);
-    setHTML($('a-debt'), `0<small> h</small>`);
-    setHTML($('b-debt'), `${Math.round(bD)}<small> h</small>`);
+    setText($('a-debt'), '0 h');
+    setText($('b-debt'), `${Math.round(bD)} h`);
     setText($('a-lapse'), aL.toFixed(1));
     setText($('b-lapse'), bL.toFixed(1));
     setText($('a-kss'), aK.toFixed(1));
     setText($('b-kss'), bK.toFixed(1));
-    setText($('a-rate'), `≈${Math.round(aL / PVT_PROMPTS * 100)}% of responses too slow`);
-    setText($('b-rate'), `≈${Math.round(bL / PVT_PROMPTS * 100)}% of responses too slow`);
+    setText($('a-rate'), `${Math.round(aL / PVT_PROMPTS * 100)}% of responses too slow`);
+    setText($('b-rate'), `${Math.round(bL / PVT_PROMPTS * 100)}% of responses too slow`);
     setText($('stage-sub'), n === 0
-      ? 'The night before the semester. Both students start rested. Blurred words are ones missed during a lapse.'
-      : `Night ${n} of the semester. Blurred words are ones missed during an attention lapse.`);
+      ? 'Before the semester, both students are rested. Words missed during an attention lapse are blurred.'
+      : `Day ${n} of the semester. Words missed during an attention lapse are blurred.`);
 
     // Takeaway
     let t = '';
     if (state.metric === 'debt') {
       t = n === 0
-        ? 'The semester hasn\'t started. Press <strong>Play semester</strong> or drag the slider.'
+        ? 'The semester hasn\'t started. Press <strong>Play</strong> or drag the slider.'
         : `After ${n} night${n === 1 ? '' : 's'}, ${SB} is <strong>${Math.round(bD)} hours</strong> short: <strong>${(bD / GOAL).toFixed(1)} full nights</strong> of sleep lost. It grows by ${short} h every night because nothing pays it back. ${SA} has lost none.`;
     } else if (state.metric === 'lapse') {
       t = `${SB} has <strong>${bL.toFixed(1)} lapses</strong> per 10-minute test versus ${aL.toFixed(1)} for ${SA}, so about <strong>${Math.round(bL / PVT_PROMPTS * 100)}%</strong> of their responses come too late.` +
@@ -241,7 +244,7 @@
     document.querySelectorAll('.lg-line').forEach(el => { el.hidden = isDebt; });
     document.querySelector('.lg-night').hidden = !isDebt;
     chart.style.display = isDebt ? 'none' : '';
-    nightsEl.hidden = !isDebt;
+    nightsEl.style.display = isDebt ? '' : 'none';
 
     if (isDebt) paintNights(bD / GOAL); else drawChart();
     lecture.rates(aL / PVT_PROMPTS, bL / PVT_PROMPTS);
@@ -286,12 +289,12 @@
     const btn = $('play');
     btn.classList.toggle('on', on);
     btn.setAttribute('aria-pressed', on);
-    $('play-text').textContent = on ? 'Pause' : 'Play semester';
+    $('play-text').textContent = on ? 'Pause' : 'Play';
     if (on) {
       if (state.day >= NIGHTS - 0.01) state.day = state.target = 0;
       if (reduceMotion.matches) {
         state.day = state.target = NIGHTS; state.playing = false;
-        btn.classList.remove('on'); $('play-text').textContent = 'Play semester';
+        btn.classList.remove('on'); $('play-text').textContent = 'Play';
         $('day').value = NIGHTS; requestRender(); return;
       }
       loop();
@@ -308,19 +311,30 @@
       rate: 0, left: 0, missed: 0, inner: null,
     });
     const S = [make('a'), make('b')];
-    let idx = 0, timer = 0, visible = true, done = false;
+    const stopBtn = $('lecture-stop');
+    let idx = 0, timer = 0, visible = true, done = false, stopped = false;
 
     function reset() {
       clearTimeout(timer); idx = 0; done = false;
       S.forEach(s => {
-        s.words.innerHTML = '<span class="inner"></span>';
-        s.inner = s.words.firstChild; s.left = 0; s.missed = 0;
+        s.words.textContent = '';
+        s.words.scrollTop = 0;
+        s.inner = s.words; s.left = 0; s.missed = 0;
         s.screen.classList.remove('lapsing');
         s.missedEl.textContent = `0 of 0 words missed`;
       });
       schedule(400);
     }
-    function schedule(ms) { clearTimeout(timer); if (visible) timer = setTimeout(step, ms); }
+    function schedule(ms) { clearTimeout(timer); if (visible && !stopped) timer = setTimeout(step, ms); }
+    function setStopped(v) {
+      stopped = v;
+      stopBtn.textContent = v ? 'Resume lecture' : 'Stop lecture';
+      stopBtn.setAttribute('aria-pressed', v);
+      if (v) { clearTimeout(timer); S.forEach(s => s.screen.classList.remove('lapsing')); }
+      else if (done) reset();
+      else schedule(WORD_MS);
+    }
+    stopBtn.addEventListener('click', () => setStopped(!stopped));
     function step() {
       if (idx >= LECTURE.length) {
         S.forEach(s => s.screen.classList.remove('lapsing'));
@@ -336,6 +350,9 @@
         sp.textContent = LECTURE[idx] + ' ';
         if (lapsing) sp.className = 'missed';
         s.inner.appendChild(sp);
+        // Text fills from the top; once it reaches the bottom, keep the newest line in view
+        const over = s.words.scrollHeight - s.words.clientHeight;
+        if (over > 0 && s.words.scrollTop < over) s.words.scrollTop = over;
         s.missedEl.textContent = `${s.missed} of ${idx + 1} words missed`;
       });
       idx++;
@@ -348,7 +365,7 @@
     }
     return {
       start: reset,
-      restart: reset,
+      restart() { if (stopped) setStopped(false); reset(); },
       setVisible,
       rates(a, b) { S[0].rate = a; S[1].rate = b; },
     };
@@ -364,8 +381,18 @@
   $('hours').addEventListener('input', e => setHours(+e.target.value));
   $('lecture-btn').addEventListener('click', () => lecture.restart());
 
-  document.querySelectorAll('.seg button').forEach(btn => {
+  const tabs = [...document.querySelectorAll('.seg button')];
+  tabs.forEach(b => b.tabIndex = b.getAttribute('aria-selected') === 'true' ? 0 : -1);
+  document.querySelector('.seg').addEventListener('keydown', e => {
+    const i = tabs.indexOf(document.activeElement);
+    if (i < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault();
+    const j = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[j].focus(); tabs[j].click();
+  });
+  tabs.forEach(btn => {
     btn.addEventListener('click', () => {
+      tabs.forEach(b => b.tabIndex = b === btn ? 0 : -1);
       if (state.metric === btn.dataset.metric) return;
       document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-selected', b === btn));
       state.metric = btn.dataset.metric;
@@ -388,13 +415,29 @@
     if (w !== lastW) { lastW = w; requestRender(); }
   }).observe(chart.parentNode);
 
-  // Gentle reveal for sections below the fold
-  const io = new IntersectionObserver(es => es.forEach(e => {
-    if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
-  }), { rootMargin: '0px 0px -6% 0px' });
-  document.querySelectorAll('.trend, .method, .refs').forEach(el => { el.classList.add('reveal'); io.observe(el); });
+  // ------------------------------------------------------------------ Hero sleep-stage trace
+  // A simplified night of sleep stages (minutes): 0 awake, 1 REM, 2 light, 3 deep.
+  const NIGHT = [[2,20],[3,45],[2,10],[1,10],[2,20],[3,30],[2,15],[1,20],[0,3],[2,30],[3,10],[2,15],[1,30],
+    [0,2],[2,40],[1,40],[2,35],[1,45],[0,3],[2,27],[1,30]];
+  function drawHeroTrace() {
+    const svg = $('hero-trace');
+    const W = svg.clientWidth || window.innerWidth, H = 88;
+    const x = m => (m / 480) * W, y = st => 8 + st * 24;
+    let t = 0, d = '', rem = '', prev = null;
+    NIGHT.forEach(([st, dur]) => {
+      d += prev === null ? `M0,${y(st)}` : `L${x(t).toFixed(1)},${y(st)}`;
+      d += `L${x(t + dur).toFixed(1)},${y(st)}`;
+      if (st === 1) rem += `M${(x(t) + 3).toFixed(1)},${y(1)}L${(x(t + dur) - 3).toFixed(1)},${y(1)}`;
+      prev = st; t += dur;
+    });
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.innerHTML = `<path d="${d}"/><path class="rem" d="${rem}"/>` +
+      `<text x="${W - 16}" y="${H - 2}" text-anchor="end">One night of sleep stages. REM, highlighted, grows toward morning.</text>`;
+  }
+  window.addEventListener('resize', drawHeroTrace);
 
   // ------------------------------------------------------------------ Go
+  drawHeroTrace();
   retargetY(true);
   render();
   lecture.start();
