@@ -233,7 +233,7 @@
     $('b-slept').style.left = `${start * 100}%`;
     $('b-slept').style.width = `${(1 - start) * 100}%`;
     $('b-night').textContent = `${clock(7 - h)} – 7:00 am`;
-    $('tonight-foot').textContent = `Student B goes to bed ${shortH} hour${shortH === 1 ? '' : 's'} later and loses ${shortH} hour${shortH === 1 ? '' : 's'} of sleep. Striped: the sleep that's missing.`;
+    $('tonight-foot').textContent = `Student B goes to bed ${shortH} hour${shortH === 1 ? '' : 's'} later and loses ${shortH} hour${shortH === 1 ? '' : 's'} of sleep.`;
   }
 
   // ------------------------------------------------------------------ Render
