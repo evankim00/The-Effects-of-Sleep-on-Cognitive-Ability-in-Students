@@ -205,6 +205,16 @@
     $('bar-nights-m').setAttribute('aria-valuenow', nights.toFixed(1));
   }
 
+  // ------------------------------------------------------------------ Sources per tab
+  const REF = {
+    1: 'Lo et al., 2016', 2: 'Cousins et al., 2019', 3: 'Cousins et al., 2018',
+    4: 'Basner & Dinges, 2011', 5: 'CDC, 2025', 6: 'Van Dongen et al., 2003',
+  };
+  const SOURCES = { debt: [5], lapse: [1, 6, 4], kss: [1, 6] };
+  function sourcesHTML(metric) {
+    return 'Sources: ' + SOURCES[metric].map(n => `<a href="#ref-${n}">${REF[n]}</a>`).join('; ');
+  }
+
   // ------------------------------------------------------------------ Render
   const legendData = document.querySelector('.lg-data');
   const legendHeld = document.querySelector('.lg-held');
@@ -248,6 +258,7 @@
       t = `${SB} rates <strong>${bK.toFixed(1)}</strong>, “${w}.” ${SA}: ${aK.toFixed(1)}. Sleepiness levels off within a week, but measured attention keeps getting worse for at least two weeks, so tired students underestimate how impaired they are.`;
     }
     setHTML($('takeaway'), t);
+    setHTML($('trend-src'), sourcesHTML(state.metric));
     const isDebt = state.metric === 'debt';
     legendData.hidden = isDebt;
     legendHeld.hidden = state.metric !== 'lapse';
@@ -409,6 +420,7 @@
       if (state.metric === btn.dataset.metric) return;
       tabs.forEach(b => b.setAttribute('aria-selected', b === btn));
       state.metric = btn.dataset.metric;
+      setHTML($('trend-src'), sourcesHTML(state.metric));
       retargetY(true);
       if (!reduceMotion.matches) {
         (state.metric === 'debt' ? debtEl : chart).animate(

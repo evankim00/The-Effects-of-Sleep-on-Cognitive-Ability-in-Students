@@ -278,6 +278,10 @@ main { padding-bottom: var(--s8); }
 .bar-scale span:first-child { transform: none; }
 .bar-scale span:last-child { transform: translateX(-100%); }
 
+.trend-src { margin: var(--s3) 0 0; text-align: right; font-size: var(--t-cap); color: var(--text-2); }
+.trend-src a { color: var(--text-2); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 2px; }
+.trend-src a:hover { color: var(--lav-ink); text-decoration-color: currentColor; }
+
 .legend { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); margin-top: var(--s4); font-size: var(--t-foot); color: var(--text-2); }
 .legend span { display: inline-flex; align-items: center; gap: var(--s2); }
 .legend [hidden] { display: none; }
